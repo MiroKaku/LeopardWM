@@ -509,6 +509,9 @@ impl AppState {
             // state still updates so Alt+Tab / next-Focused-event correctly
             // resync once the cloak lifts.
             let target_cloaked = leopardwm_platform_win32::is_placement_cloaked(hwnd);
+            #[cfg(not(test))]
+            let already_foreground =
+                leopardwm_platform_win32::get_foreground_window() == Some(hwnd);
 
             // Set foreground window — track it regardless of OS result since
             // this is our intended focus. The call can fail if the window
@@ -517,7 +520,7 @@ impl AppState {
             // can't collide with a real running HWND and lag the user's mouse
             // via AttachThreadInput.
             #[cfg(not(test))]
-            if !target_cloaked {
+            if !target_cloaked && !already_foreground {
                 let _ = leopardwm_platform_win32::set_foreground_window(hwnd);
             }
             #[cfg(test)]

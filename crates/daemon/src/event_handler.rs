@@ -1628,6 +1628,18 @@ impl AppState {
             let user_initiated = leopardwm_platform_win32::ms_since_last_user_input()
                 .map(|ms| ms <= FOCUS_INPUT_RECENT_MS)
                 .unwrap_or(false);
+            // Ghost/off-screen-parked windows are transitional: Windows can
+            // foreground them while SetWindowPos/DWM animations are in
+            // flight, which yanks focus off the window the user actually
+            // clicked. Those events are not user intent; let the animation
+            // landing pass re-assert the real focused window instead.
+            if !user_initiated
+                && (self.ghost_handles.contains_key(&hwnd)
+                    || leopardwm_platform_win32::is_placement_cloaked(hwnd))
+            {
+                debug!("Ignoring focus {} while ghosted/cloaked", hwnd);
+                return;
+            }
             // A non-user-initiated focus event for a window other than the
             // fullscreen one (e.g. a window that just opened behind a fullscreen
             // window and self-activated) must not pull focus off the fullscreen
