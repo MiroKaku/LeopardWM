@@ -9,7 +9,8 @@
 ![Platform: Windows 10/11](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D4)
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?logo=buy-me-a-coffee&logoColor=000)](https://buymeacoffee.com/jcardama)
 
-> **注意：** 这是按个人喜好修改的 LeopardWM 分支；本分支中自主添加或修改的部分完全由 AI 编写。
+> **Note:** This is a personally customized fork of LeopardWM; all original
+> additions and modifications in this branch are written entirely by AI.
 
 A scrollable tiling window manager for Windows.
 

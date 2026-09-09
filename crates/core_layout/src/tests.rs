@@ -589,6 +589,23 @@ mod tests {
     }
 
     #[test]
+    fn test_clamp_scroll_after_shrink() {
+        let mut ws = Workspace::with_gaps(10, 10);
+        ws.insert_window(1, Some(400)).unwrap();
+        ws.insert_window(2, Some(400)).unwrap();
+        ws.insert_window(3, Some(400)).unwrap();
+        let viewport_width = 500;
+        let vis_w = viewport_width - 10 - 10;
+
+        ws.set_scroll_offset(800.0);
+        ws.set_column_width_pixels(2, 200);
+
+        ws.clamp_scroll_to_content(viewport_width);
+        let max_scroll = (ws.total_width() - vis_w).max(0) as f64;
+        assert_eq!(ws.scroll_offset(), max_scroll);
+    }
+
+    #[test]
     fn test_rect_intersects() {
         let r1 = Rect::new(0, 0, 100, 100);
         let r2 = Rect::new(50, 50, 100, 100);

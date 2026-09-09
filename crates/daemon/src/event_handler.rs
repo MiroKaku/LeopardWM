@@ -2939,6 +2939,7 @@ impl AppState {
             }
             rects
         };
+        let resize_edge = self.resize_edge;
         self.teardown_resize_preview_ui();
         let Some((monitor_id, ws_idx)) = self.find_window_workspace(hwnd) else {
             let _ = self.apply_layout();
@@ -3037,6 +3038,10 @@ impl AppState {
                         hwnd,
                         ws.columns().get(col_idx).map(|c| c.width()).unwrap_or(0)
                     );
+                }
+
+                if resize_edge != Some(ResizeEdge::Left) {
+                    ws.clamp_scroll_to_content(viewport_width);
                 }
             }
         }

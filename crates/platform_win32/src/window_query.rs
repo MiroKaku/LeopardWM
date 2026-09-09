@@ -366,10 +366,8 @@ pub fn is_cursor_on_horizontal_resize_border(hwnd: WindowId) -> bool {
     let Some((cx, _)) = get_cursor_pos() else {
         return false;
     };
-    let border_x = unsafe {
-        GetSystemMetrics(SM_CXSIZEFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER)
-    }
-    .max(8);
+    let border_x =
+        unsafe { GetSystemMetrics(SM_CXSIZEFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER) }.max(8);
 
     let chrome = get_window_chrome_rect(hwnd);
     let visible = get_window_visible_rect(hwnd);

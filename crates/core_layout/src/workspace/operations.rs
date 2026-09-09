@@ -433,6 +433,16 @@ impl Workspace {
         self.scroll_offset = self.scroll_offset.clamp(0.0, max_scroll as f64);
     }
 
+    /// Clamp the base scroll offset to the current content bounds without
+    /// re-centering or animating. Used after a resize shrinks the strip so a
+    /// stale scroll position cannot leave empty space at the viewport edge.
+    pub fn clamp_scroll_to_content(&mut self, viewport_width: i32) {
+        self.cancel_animation();
+        let vis_w = self.visible_width(viewport_width);
+        let max_scroll = (self.total_width() - vis_w).max(0) as f64;
+        self.scroll_offset = self.scroll_offset.clamp(0.0, max_scroll);
+    }
+
     // ========================================================================
     // Animation Methods
     // ========================================================================

@@ -46,6 +46,11 @@ All notable changes to LeopardWM will be documented in this file.
   shrinking/growing the adjacent column; the live scroll offset is preserved
   on release so the drop position stays where the user left it.
 
+- **Right-edge resize clamps stale scroll after shrinking.** Releasing a
+  right-edge drag reclamps the scroll offset to the new content bounds, so a
+  strip that shrank cannot keep an out-of-range offset and leave blank space
+  at the right viewport edge.
+
 - **New windows stay on the monitor where Windows opens them.** Monitor
   selection uses opening bounds when they map to an attached monitor; otherwise
   it retains the focused monitor, while preserving fullscreen stacking without
