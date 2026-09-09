@@ -2179,21 +2179,21 @@ impl AppState {
 
         let shift_held = is_shift_key_pressed();
 
-        if shift_held {
-            // Clean up placeholder (shouldn't exist in shift mode, but be safe).
+        if !shift_held {
+            // Clean up placeholder (shouldn't exist in reorder mode, but be safe).
             for ws_vec in self.workspaces.values_mut() {
                 for ws in ws_vec.iter_mut() {
                     let _ = ws.remove_window(crate::state::DRAG_PLACEHOLDER_HWND);
                 }
             }
-            // Shift+drop: column reorder (already live-reordered, or cross-monitor).
+            // Default drop: column reorder (already live-reordered, or cross-monitor).
             if target_monitor == drag.source_monitor {
                 self.snap_back_tiled(drag.source_monitor, drag.source_workspace_idx);
             } else {
                 self.execute_cross_monitor_drag(hwnd, &drag, target_monitor, &win_info.rect);
             }
         } else {
-            // Default drop: swap placeholder with real window in-place.
+            // Shift+drop: swap placeholder with real window in-place.
             self.finalize_drag_merge(hwnd, &drag, target_monitor, &win_info.rect);
         }
         // Re-enable DWM transitions on the dropped window now

@@ -1553,7 +1553,7 @@ fn test_safe_drag_band_preview_transitions_and_restores() {
     let band_y = target.y;
     let body_y = target.y + 300;
 
-    state.update_drag_hint_at(100, target.x + 10, band_y, 1, false);
+    state.update_drag_hint_at(100, target.x + 10, band_y, 1, true);
 
     assert!(!state
         .focused_workspace()
@@ -1565,7 +1565,7 @@ fn test_safe_drag_band_preview_transitions_and_restores() {
         Some(crate::state::DragPreviewMode::SafeBand)
     );
 
-    state.update_drag_hint_at(100, target.x + 10, body_y, 1, false);
+    state.update_drag_hint_at(100, target.x + 10, body_y, 1, true);
 
     assert!(state
         .focused_workspace()
@@ -1578,7 +1578,7 @@ fn test_safe_drag_band_preview_transitions_and_restores() {
     let shifted = state.snapshot_layout();
     let peer_start = *shifted.get(&200).expect("shifted peer geometry");
 
-    state.update_drag_hint_at(100, target.x + 10, band_y, 1, false);
+    state.update_drag_hint_at(100, target.x + 10, band_y, 1, true);
 
     assert!(!state
         .focused_workspace()
@@ -1592,7 +1592,7 @@ fn test_safe_drag_band_preview_transitions_and_restores() {
     assert!(!transition.start_rects.contains_key(&100));
     assert!(!transition.start_rects.contains_key(&DRAG_PLACEHOLDER_HWND));
 
-    state.update_drag_hint_at(100, target.x + 10, body_y, 1, false);
+    state.update_drag_hint_at(100, target.x + 10, body_y, 1, true);
 
     assert!(state
         .focused_workspace()
@@ -1625,7 +1625,7 @@ fn test_body_preview_shift_transition_restores_before_reorder() {
     let body_y = target.y + 300;
     let cross_monitor_target = *state.snapshot_layout().get(&300).unwrap();
 
-    state.update_drag_hint_at(100, target.x + 10, body_y, 1, false);
+    state.update_drag_hint_at(100, target.x + 10, body_y, 1, true);
     assert!(state
         .focused_workspace()
         .unwrap()
@@ -1636,7 +1636,7 @@ fn test_body_preview_shift_transition_restores_before_reorder() {
         cross_monitor_target.x + 10,
         cross_monitor_target.y + 300,
         2,
-        true,
+        false,
     );
 
     let workspace = state.focused_workspace().unwrap();
@@ -1693,7 +1693,7 @@ fn test_body_preview_shift_restores_multi_window_source_before_same_monitor_reor
     });
 
     let target = *state.snapshot_layout().get(&200).unwrap();
-    state.update_drag_hint_at(100, target.x + 10, target.y + 300, 1, false);
+    state.update_drag_hint_at(100, target.x + 10, target.y + 300, 1, true);
     let source_after_body = state.focused_workspace().unwrap();
     assert_eq!(source_after_body.find_window_location(100), None);
     assert_eq!(source_after_body.find_window_location(101), Some((0, 0)));
@@ -1702,7 +1702,7 @@ fn test_body_preview_shift_restores_multi_window_source_before_same_monitor_reor
     let shifted_peer_rect = *state.snapshot_layout().get(&101).unwrap();
 
     let source_target = *state.snapshot_layout().get(&200).unwrap();
-    state.update_drag_hint_at(100, source_target.x + 10, source_target.y + 300, 1, true);
+    state.update_drag_hint_at(100, source_target.x + 10, source_target.y + 300, 1, false);
 
     let workspace = state.focused_workspace().unwrap();
     assert_eq!(workspace.find_window_location(100), Some((1, 0)));
@@ -1755,7 +1755,7 @@ fn test_body_preview_shift_restores_multi_window_source_without_reorder() {
     });
 
     let target = *state.snapshot_layout().get(&200).unwrap();
-    state.update_drag_hint_at(100, target.x + 10, target.y + 300, 1, false);
+    state.update_drag_hint_at(100, target.x + 10, target.y + 300, 1, true);
     let shifted_peer_rect = *state.snapshot_layout().get(&101).unwrap();
     let current_column_rect = *state.snapshot_layout().get(&101).unwrap();
 
@@ -1764,7 +1764,7 @@ fn test_body_preview_shift_restores_multi_window_source_without_reorder() {
         current_column_rect.x + 10,
         current_column_rect.y + 300,
         1,
-        true,
+        false,
     );
 
     let workspace = state.focused_workspace().unwrap();
@@ -1825,7 +1825,7 @@ fn test_body_preview_shift_restores_multi_window_source_before_cross_monitor_dro
     });
 
     let target = *state.snapshot_layout().get(&200).unwrap();
-    state.update_drag_hint_at(100, target.x + 10, target.y + 300, 1, false);
+    state.update_drag_hint_at(100, target.x + 10, target.y + 300, 1, true);
     let shifted_peer_rect = *state.snapshot_layout().get(&101).unwrap();
     let cross_monitor_target = *state.snapshot_layout().get(&300).unwrap();
     state.update_drag_hint_at(
@@ -1833,7 +1833,7 @@ fn test_body_preview_shift_restores_multi_window_source_before_cross_monitor_dro
         cross_monitor_target.x + 10,
         cross_monitor_target.y + 300,
         2,
-        true,
+        false,
     );
 
     let source = state
@@ -1912,11 +1912,11 @@ fn test_body_to_safe_band_then_shift_restores_multi_window_source() {
     });
 
     let target = *state.snapshot_layout().get(&200).unwrap();
-    state.update_drag_hint_at(100, target.x + 10, target.y + 300, 1, false);
+    state.update_drag_hint_at(100, target.x + 10, target.y + 300, 1, true);
     assert!(state.drag_state.as_ref().unwrap().removed_from_source);
     let shifted_peer_rect = *state.snapshot_layout().get(&101).unwrap();
 
-    state.update_drag_hint_at(100, target.x + 10, target.y, 1, false);
+    state.update_drag_hint_at(100, target.x + 10, target.y, 1, true);
     assert_eq!(
         state.drag_state.as_ref().map(|drag| drag.preview_mode),
         Some(crate::state::DragPreviewMode::SafeBand)
@@ -1942,7 +1942,7 @@ fn test_body_to_safe_band_then_shift_restores_multi_window_source() {
         current_column_rect.x + 10,
         current_column_rect.y + 300,
         1,
-        true,
+        false,
     );
 
     let workspace = state.focused_workspace().unwrap();
@@ -1968,9 +1968,9 @@ fn test_body_to_safe_band_then_shift_restores_multi_window_source() {
         intermediate_transition
     );
 
-    // Existing Shift reorder still works after the restore.
+    // Existing default reorder still works after the restore.
     let reorder_target = *state.snapshot_layout().get(&200).unwrap();
-    state.update_drag_hint_at(100, reorder_target.x + 10, reorder_target.y + 300, 1, true);
+    state.update_drag_hint_at(100, reorder_target.x + 10, reorder_target.y + 300, 1, false);
     let workspace = state.focused_workspace().unwrap();
     assert_eq!(workspace.find_window_location(200), Some((0, 0)));
     assert_eq!(workspace.find_window_location(100), Some((1, 0)));
@@ -2032,12 +2032,12 @@ fn test_body_to_no_target_then_cross_monitor_shift_restores_multi_window_source(
     });
 
     let target = *state.snapshot_layout().get(&200).unwrap();
-    state.update_drag_hint_at(100, target.x + 10, target.y + 300, 1, false);
+    state.update_drag_hint_at(100, target.x + 10, target.y + 300, 1, true);
     assert!(state.drag_state.as_ref().unwrap().removed_from_source);
     let shifted_peer_rect = *state.snapshot_layout().get(&101).unwrap();
 
     // Cursor leaves every column: preview drops to no-target (None mode).
-    state.update_drag_hint_at(100, -100, target.y + 300, 1, false);
+    state.update_drag_hint_at(100, -100, target.y + 300, 1, true);
     assert_eq!(
         state.drag_state.as_ref().map(|drag| drag.preview_mode),
         Some(crate::state::DragPreviewMode::None)
@@ -2063,7 +2063,7 @@ fn test_body_to_no_target_then_cross_monitor_shift_restores_multi_window_source(
         cross_monitor_target.x + 10,
         cross_monitor_target.y + 300,
         2,
-        true,
+        false,
     );
 
     let source = state
@@ -2143,7 +2143,7 @@ fn test_body_preview_shift_restores_same_column_reordered_slot() {
     let top = *source_layout.get(&100).unwrap();
     let bottom = *source_layout.get(&102).unwrap();
     let column_height = bottom.y + bottom.height - top.y;
-    state.update_drag_hint_at(100, top.x + 10, top.y + column_height / 3 + 5, 1, false);
+    state.update_drag_hint_at(100, top.x + 10, top.y + column_height / 3 + 5, 1, true);
     {
         let workspace = state.focused_workspace().unwrap();
         assert_eq!(workspace.find_window_location(101), Some((0, 0)));
@@ -2155,7 +2155,7 @@ fn test_body_preview_shift_restores_same_column_reordered_slot() {
     // Cross-column Body preview removes 100 from the source column. The
     // reordered slot — not the drag-start slot — must be tracked.
     let target = *state.snapshot_layout().get(&200).unwrap();
-    state.update_drag_hint_at(100, target.x + 10, target.y + 300, 1, false);
+    state.update_drag_hint_at(100, target.x + 10, target.y + 300, 1, true);
     {
         let workspace = state.focused_workspace().unwrap();
         assert_eq!(workspace.find_window_location(100), None);
@@ -2166,14 +2166,14 @@ fn test_body_preview_shift_restores_same_column_reordered_slot() {
     assert_eq!(drag.source_window_slot, 1);
     let shifted_peer_rect = *state.snapshot_layout().get(&101).unwrap();
 
-    // Shift restoration reinserts at the reordered slot, not slot 0.
+    // Default reorder restoration reinserts at the reordered slot, not slot 0.
     let source_column_rect = *state.snapshot_layout().get(&101).unwrap();
     state.update_drag_hint_at(
         100,
         source_column_rect.x + 10,
         source_column_rect.y + 300,
         1,
-        true,
+        false,
     );
 
     let workspace = state.focused_workspace().unwrap();
@@ -2198,9 +2198,9 @@ fn test_body_preview_shift_restores_same_column_reordered_slot() {
     assert!(!transition.start_rects.contains_key(&100));
     assert!(!transition.start_rects.contains_key(&DRAG_PLACEHOLDER_HWND));
 
-    // Existing Shift column reorder still works, preserving the new order.
+    // Existing default column reorder still works, preserving the new order.
     let reorder_target = *state.snapshot_layout().get(&200).unwrap();
-    state.update_drag_hint_at(100, reorder_target.x + 10, reorder_target.y + 300, 1, true);
+    state.update_drag_hint_at(100, reorder_target.x + 10, reorder_target.y + 300, 1, false);
     let workspace = state.focused_workspace().unwrap();
     assert_eq!(workspace.find_window_location(200), Some((0, 0)));
     assert_eq!(workspace.find_window_location(101), Some((1, 0)));
@@ -2227,7 +2227,7 @@ fn test_safe_band_does_not_override_tabbed_append_preview() {
     workspace.toggle_focused_column_tabbed_mode();
     let target = *state.snapshot_layout().get(&200).unwrap();
 
-    state.update_drag_hint_at(100, target.x + 10, target.y, 1, false);
+    state.update_drag_hint_at(100, target.x + 10, target.y, 1, true);
 
     let workspace = state.focused_workspace().unwrap();
     assert!(workspace.column(1).is_some_and(|column| column.is_tabbed()));
@@ -2248,7 +2248,7 @@ fn test_safe_band_does_not_override_tabbed_append_preview() {
 fn test_safe_band_drop_uses_no_placeholder_fallback_target() {
     let mut state = safe_band_drag_fixture();
     let target = *state.snapshot_layout().get(&200).unwrap();
-    state.update_drag_hint_at(100, target.x + 10, target.y, 1, false);
+    state.update_drag_hint_at(100, target.x + 10, target.y, 1, true);
     let drag = state.drag_state.take().unwrap();
 
     state.finalize_drag_merge(100, &drag, 1, &Rect::new(900, 0, 800, 1040));
@@ -2294,7 +2294,7 @@ fn test_safe_band_drop_follows_surviving_target_column_after_peer_lifecycle_shif
     });
 
     let target = *state.snapshot_layout().get(&200).unwrap();
-    state.update_drag_hint_at(100, target.x + 10, target.y, 1, false);
+    state.update_drag_hint_at(100, target.x + 10, target.y, 1, true);
     {
         let drag = state.drag_state.as_ref().unwrap();
         assert_eq!(drag.preview_mode, crate::state::DragPreviewMode::SafeBand);
@@ -2360,7 +2360,7 @@ fn test_safe_band_drop_snaps_back_when_target_identity_vanishes_entirely() {
     });
 
     let target = *state.snapshot_layout().get(&200).unwrap();
-    state.update_drag_hint_at(100, target.x + 10, target.y, 1, false);
+    state.update_drag_hint_at(100, target.x + 10, target.y, 1, true);
     {
         let drag = state.drag_state.as_ref().unwrap();
         assert_eq!(drag.preview_mode, crate::state::DragPreviewMode::SafeBand);
@@ -2424,7 +2424,7 @@ fn test_shift_restore_follows_surviving_source_column_after_peer_lifecycle_shift
         target_rect.x + 10,
         target_rect.y + target_rect.height - 5,
         1,
-        false,
+        true,
     );
     {
         let drag = state.drag_state.as_ref().unwrap();
@@ -2455,7 +2455,7 @@ fn test_shift_restore_follows_surviving_source_column_after_peer_lifecycle_shift
     // semantics, so the stale cached index cannot redirect the restore into
     // the target column.
     let source_rect = *state.snapshot_layout().get(&101).unwrap();
-    state.update_drag_hint_at(100, source_rect.x + 10, source_rect.y, 1, true);
+    state.update_drag_hint_at(100, source_rect.x + 10, source_rect.y, 1, false);
 
     let workspace = state.focused_workspace().unwrap();
     assert_eq!(workspace.column_count(), 2);
@@ -2508,7 +2508,7 @@ fn test_shift_restore_creates_new_column_when_no_source_peer_survives() {
         target_rect.x + 10,
         target_rect.y + target_rect.height - 5,
         1,
-        false,
+        true,
     );
     assert!(state.drag_state.as_ref().unwrap().removed_from_source);
 
@@ -2518,7 +2518,7 @@ fn test_shift_restore_creates_new_column_when_no_source_peer_survives() {
     assert!(!state.focused_workspace().unwrap().contains_window(101));
 
     let target_rect = *state.snapshot_layout().get(&200).unwrap();
-    state.update_drag_hint_at(100, target_rect.x + 10, target_rect.y, 1, true);
+    state.update_drag_hint_at(100, target_rect.x + 10, target_rect.y, 1, false);
 
     let workspace = state.focused_workspace().unwrap();
     // 100 must be restored as its own column, not folded into the

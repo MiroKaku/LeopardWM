@@ -40,8 +40,8 @@ impl AppState {
     }
 
     /// Compute and show a drag hint overlay.
-    /// Default drag = move window between columns (merge mode).
-    /// Shift+drag = move entire column (reorder mode).
+    /// Default drag = move entire column (reorder mode).
+    /// Shift+drag = move window between columns (merge mode).
     pub(crate) fn update_drag_hint(&mut self, hwnd: u64) {
         // No drag ghost while tiling is paused.
         if self.paused {
@@ -103,7 +103,7 @@ impl AppState {
             None => return,
         };
 
-        if shift_held {
+        if !shift_held {
             let mut restoration_snapshot = None;
             let preview_is_body = self
                 .drag_state
@@ -195,7 +195,7 @@ impl AppState {
                 self.pending_drag_hint = Some(DragHintAction::Hide);
             }
 
-            // --- Shift+drag: column reorder mode ---
+            // --- Default drag: column reorder mode ---
             // Only live-reorder on the source monitor; cross-monitor happens on drop.
             if target_monitor_id != source_monitor {
                 if let Some(snapshot) = restoration_snapshot {
@@ -225,7 +225,7 @@ impl AppState {
                 );
             }
         } else {
-            // --- Default drag: window merge mode with live preview ---
+            // --- Shift+drag: window merge mode with live preview ---
             // Source column keeps the dragged window (preserving its space).
             // Target column gets a placeholder so its windows shift to make room.
 
@@ -1003,7 +1003,7 @@ impl AppState {
         self.sync_foreground_window();
     }
 
-    /// Finalize a default drag-drop by swapping the placeholder with the real window.
+    /// Finalize a Shift+drag merge by swapping the placeholder with the real window.
     /// Avoids a redundant transition since windows are already at their final positions
     /// from the live preview during drag.
     ///
