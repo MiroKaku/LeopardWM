@@ -489,10 +489,8 @@ impl Workspace {
 
     /// Move focus to the next window in linear order across all columns.
     ///
-    /// Traverses columns left-to-right, windows top-to-bottom. When at the
-    /// last window of a column, wraps to the first window of the next column.
-    /// When at the last window of the last column, wraps to the first window
-    /// of the first column.
+    /// Traverses columns left-to-right, windows top-to-bottom. Focus stops at
+    /// the last visible window of the last column instead of wrapping.
     pub fn focus_next(&mut self) {
         if self.columns.is_empty() {
             return;
@@ -513,11 +511,8 @@ impl Workspace {
             }
         }
 
-        // Move to next columns, wrapping around. Tabbed targets land on
-        // their active tab; Vertical targets land on the first visible.
-        let n = self.columns.len();
-        for offset in 1..=n {
-            let col_idx = (start_col + offset) % n;
+        // Move to next columns without wrapping.
+        for col_idx in (start_col + 1)..self.columns.len() {
             if self.has_visible_window_in_column(col_idx) {
                 self.focused_column = col_idx;
                 let landing = self
@@ -535,10 +530,8 @@ impl Workspace {
 
     /// Move focus to the previous window in linear order across all columns.
     ///
-    /// Traverses columns right-to-left, windows bottom-to-top. When at the
-    /// first window of a column, wraps to the last window of the previous
-    /// column. When at the first window of the first column, wraps to the
-    /// last window of the last column.
+    /// Traverses columns right-to-left, windows bottom-to-top. Focus stops at
+    /// the first visible window of the first column instead of wrapping.
     pub fn focus_prev(&mut self) {
         if self.columns.is_empty() {
             return;
@@ -559,11 +552,8 @@ impl Workspace {
             }
         }
 
-        // Move to previous columns, wrapping around. Tabbed targets land
-        // on their active tab; Vertical targets land on the last visible.
-        let n = self.columns.len();
-        for offset in 1..=n {
-            let col_idx = (start_col + n - offset) % n;
+        // Move to previous columns without wrapping.
+        for col_idx in (0..start_col).rev() {
             if let Some(column) = self.columns.get(col_idx) {
                 // Tabbed: jump straight to active tab if visible.
                 if let Some(active_idx) = column.active_tab_idx() {

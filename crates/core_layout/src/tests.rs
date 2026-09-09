@@ -2482,6 +2482,32 @@ mod tests {
     }
 
     #[test]
+    fn test_focus_next_stops_at_end() {
+        let mut ws = Workspace::new();
+        ws.insert_window(1, Some(400)).unwrap();
+        ws.insert_window(2, Some(400)).unwrap();
+
+        ws.focus_start();
+        ws.focus_next();
+        assert_eq!(ws.focused_column_index(), 1);
+        ws.focus_next();
+        assert_eq!(ws.focused_column_index(), 1);
+    }
+
+    #[test]
+    fn test_focus_prev_stops_at_start() {
+        let mut ws = Workspace::new();
+        ws.insert_window(1, Some(400)).unwrap();
+        ws.insert_window(2, Some(400)).unwrap();
+
+        ws.focus_end();
+        ws.focus_prev();
+        assert_eq!(ws.focused_column_index(), 0);
+        ws.focus_prev();
+        assert_eq!(ws.focused_column_index(), 0);
+    }
+
+    #[test]
     fn test_adjust_neighbor_width_for_resize_left_edge() {
         let mut ws = Workspace::new();
         ws.insert_window(1, Some(400)).unwrap();
