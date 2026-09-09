@@ -1673,7 +1673,11 @@ impl AppState {
                         hwnd, monitor_id, user_initiated
                     );
                     if user_initiated {
-                        workspace.ensure_focused_visible_animated(viewport_width);
+                        if leopardwm_platform_win32::is_cursor_on_resize_border(hwnd) {
+                            debug!("Focus {} from border resize gesture; keeping scroll", hwnd);
+                        } else {
+                            workspace.ensure_focused_visible_animated(viewport_width);
+                        }
                     }
                 }
             }
