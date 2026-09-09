@@ -114,19 +114,18 @@ impl AppState {
             }
             let border_width = self.scaled_border_width(hwnd);
             let corner_radius = self.corner_radius_for_window(hwnd);
-            // During resize preview: show border at the preview snap target.
-            if let Some(rect) = self.resize_preview_display_rect {
-                if self.config.appearance.active_border {
-                    if let Some(bgr) = self.border_color_bgr() {
-                        frame.show_at_rect(
-                            rect,
-                            border_width,
-                            self.border_position(),
-                            bgr,
-                            corner_radius,
-                        );
-                        return;
-                    }
+            // During active border resize: follow the OS-resized window's
+            // live rect, not the ghost/snap target.
+            if self.resize_hwnd == Some(hwnd) && self.config.appearance.active_border {
+                if let Some(bgr) = self.border_color_bgr() {
+                    frame.show(
+                        hwnd,
+                        border_width,
+                        self.border_position(),
+                        bgr,
+                        corner_radius,
+                    );
+                    return;
                 }
             }
             // During tiled drag: show border at the window's layout position.

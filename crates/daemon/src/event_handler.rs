@@ -2765,6 +2765,7 @@ impl AppState {
                 }
             }
         }
+        self.show_border(hwnd);
         let _ = self.apply_layout();
 
         if !self.config.snap_hints.enabled {
@@ -2783,7 +2784,6 @@ impl AppState {
             }
             self.resize_preview_display_rect = Some(target_rect);
             self.resize_preview_display_rects = target_rects;
-            self.show_border(hwnd);
             return;
         }
 
@@ -2808,7 +2808,6 @@ impl AppState {
         self.pending_drag_hint = Some(crate::state::DragHintAction::ShowGhosts {
             rects: self.resize_preview_display_rects.clone(),
         });
-        self.show_border(hwnd);
     }
 
     /// Handle resize completion: snap the resized window's column width and height
