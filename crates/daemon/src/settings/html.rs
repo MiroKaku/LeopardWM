@@ -1275,6 +1275,16 @@ input[type="range"]::-webkit-slider-thumb {
             <div class="field-info"><div class="field-label" id="lbl-scroll-down">Scroll down</div><div class="field-desc">Scroll wheel down command</div></div>
             <div class="combobox" id="cb-gestures-scroll_down" data-value="focus_prev"></div>
           </div>
+          <div class="field">
+            <div class="field-info"><div class="field-label">Scroll direction</div><div class="field-desc">Modifier+wheel focus convention: Mac uses down-left/up-right; Windows uses down-right/up-left</div></div>
+            <div class="combobox" id="cb-gestures-scroll_direction">
+              <button class="combobox-trigger" type="button"><span class="combobox-text">Mac</span><svg class="combobox-chevron" viewBox="0 0 12 12"><path d="M2.15 4.65a.5.5 0 01.7 0L6 7.79l3.15-3.14a.5.5 0 11.7.7l-3.5 3.5a.5.5 0 01-.7 0l-3.5-3.5a.5.5 0 010-.7z"/></svg></button>
+              <div class="combobox-popup">
+                <div class="combobox-option selected" data-value="mac">Mac</div>
+                <div class="combobox-option" data-value="windows">Windows</div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1603,6 +1613,7 @@ function init(cfg) {
   setCb('cb-gestures-swipe_down', cfg.gestures.swipe_down, true);
   setCb('cb-gestures-scroll_up', cfg.gestures.scroll_up, true);
   setCb('cb-gestures-scroll_down', cfg.gestures.scroll_down, true);
+  setCb('cb-gestures-scroll_direction', cfg.gestures.scroll_direction || 'mac');
   updateScrollLabels();
 
   setChecked('snaphints-enabled', cfg.snap_hints.enabled);
@@ -2216,7 +2227,8 @@ function readConfig() {
       enabled: checked('gestures-enabled'),
       swipe_left: cbVal('cb-gestures-swipe_left'), swipe_right: cbVal('cb-gestures-swipe_right'),
       swipe_up: cbVal('cb-gestures-swipe_up'), swipe_down: cbVal('cb-gestures-swipe_down'),
-      scroll_up: cbVal('cb-gestures-scroll_up'), scroll_down: cbVal('cb-gestures-scroll_down')
+      scroll_up: cbVal('cb-gestures-scroll_up'), scroll_down: cbVal('cb-gestures-scroll_down'),
+      scroll_direction: cbVal('cb-gestures-scroll_direction')
     },
     snap_hints: {
       enabled: checked('snaphints-enabled'),
@@ -2385,6 +2397,15 @@ mod tests {
         assert!(SETTINGS_HTML
             .contains("setCb('cb-behavior-resize_mode', cfg.behavior.resize_mode || 'snap');"));
         assert!(SETTINGS_HTML.contains("resize_mode: cbVal('cb-behavior-resize_mode')"));
+    }
+
+    #[test]
+    fn scroll_direction_is_wired_into_settings_config() {
+        assert!(SETTINGS_HTML.contains("id=\"cb-gestures-scroll_direction\""));
+        assert!(SETTINGS_HTML.contains(
+            "setCb('cb-gestures-scroll_direction', cfg.gestures.scroll_direction || 'mac');"
+        ));
+        assert!(SETTINGS_HTML.contains("scroll_direction: cbVal('cb-gestures-scroll_direction')"));
     }
 
     #[test]

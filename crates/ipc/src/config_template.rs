@@ -123,6 +123,9 @@ swipe_left = "focus_left"
 swipe_right = "focus_right"
 swipe_up = "focus_up"
 swipe_down = "focus_down"
+# Modifier+wheel focus direction: "mac" (down=left, up=right) or
+# "windows" (down=right, up=left).
+scroll_direction = "mac"
 
 [snap_hints]
 # Visual snap hint overlays during resize

@@ -1913,8 +1913,20 @@ async fn handle_gesture_event(ctx: &mut EventLoopCtx<'_>, gesture_event: Gesture
         GestureEvent::SwipeRight => &gesture_config.swipe_right,
         GestureEvent::SwipeUp => &gesture_config.swipe_up,
         GestureEvent::SwipeDown => &gesture_config.swipe_down,
-        GestureEvent::ScrollUp => &gesture_config.scroll_up,
-        GestureEvent::ScrollDown => &gesture_config.scroll_down,
+        GestureEvent::ScrollUp => {
+            if gesture_config.scroll_direction == crate::config::ScrollDirection::Windows {
+                &gesture_config.scroll_down
+            } else {
+                &gesture_config.scroll_up
+            }
+        }
+        GestureEvent::ScrollDown => {
+            if gesture_config.scroll_direction == crate::config::ScrollDirection::Windows {
+                &gesture_config.scroll_up
+            } else {
+                &gesture_config.scroll_down
+            }
+        }
     };
 
     match classify_gesture_command(cmd_str) {

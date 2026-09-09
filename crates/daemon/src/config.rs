@@ -743,6 +743,17 @@ impl Default for HotkeyConfig {
     }
 }
 
+/// Modifier+wheel focus direction convention.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScrollDirection {
+    /// Wheel down focuses left (`focus_prev`); wheel up focuses right.
+    #[default]
+    Mac,
+    /// Wheel down focuses right (`focus_next`); wheel up focuses left.
+    Windows,
+}
+
 /// Gesture bindings for touchpad support.
 ///
 /// Maps touchpad gestures to commands.
@@ -776,6 +787,10 @@ pub struct GestureConfig {
     /// Command for modifier+scroll down (physical mouse wheel).
     #[serde(default = "default_scroll_down")]
     pub scroll_down: String,
+
+    /// Direction convention for modifier+wheel focus navigation.
+    #[serde(default)]
+    pub scroll_direction: ScrollDirection,
 }
 
 fn default_false() -> bool {
@@ -820,6 +835,7 @@ impl Default for GestureConfig {
             swipe_down: default_swipe_down(),
             scroll_up: default_scroll_up(),
             scroll_down: default_scroll_down(),
+            scroll_direction: ScrollDirection::default(),
         }
     }
 }
@@ -2062,6 +2078,22 @@ mod tests {
         "#;
         let config: Config = toml::from_str(toml_str).unwrap();
         assert_eq!(config.behavior.resize_mode, ResizeMode::Free);
+    }
+
+    #[test]
+    fn test_scroll_direction_defaults_mac() {
+        let config = Config::default();
+        assert_eq!(config.gestures.scroll_direction, ScrollDirection::Mac);
+    }
+
+    #[test]
+    fn test_scroll_direction_serialization_windows() {
+        let toml_str = r#"
+            [gestures]
+            scroll_direction = "windows"
+        "#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.gestures.scroll_direction, ScrollDirection::Windows);
     }
 
     #[test]

@@ -861,6 +861,7 @@ fn test_generate_default_config_contains_gestures() {
     let config = generate_default_config();
     assert!(config.contains("[gestures]"));
     assert!(config.contains("enabled = true"));
+    assert!(config.contains("scroll_direction"));
 }
 
 #[test]
