@@ -1130,10 +1130,10 @@ input[type="range"]::-webkit-slider-thumb {
           <div class="field">
             <div class="field-info"><div class="field-label">Resize mode</div><div class="field-desc">Border-drag behavior: snap to width/height presets, or keep the exact dragged size</div></div>
             <div class="combobox" id="cb-behavior-resize_mode">
-              <button class="combobox-trigger" type="button"><span class="combobox-text">Snap to presets</span><svg class="combobox-chevron" viewBox="0 0 12 12"><path d="M2.15 4.65a.5.5 0 01.7 0L6 7.79l3.15-3.14a.5.5 0 11.7.7l-3.5 3.5a.5.5 0 01-.7 0l-3.5-3.5a.5.5 0 010-.7z"/></svg></button>
+              <button class="combobox-trigger" type="button"><span class="combobox-text">Free / exact</span><svg class="combobox-chevron" viewBox="0 0 12 12"><path d="M2.15 4.65a.5.5 0 01.7 0L6 7.79l3.15-3.14a.5.5 0 11.7.7l-3.5 3.5a.5.5 0 01-.7 0l-3.5-3.5a.5.5 0 010-.7z"/></svg></button>
               <div class="combobox-popup">
-                <div class="combobox-option selected" data-value="snap">Snap to presets</div>
-                <div class="combobox-option" data-value="free">Free / exact</div>
+                <div class="combobox-option" data-value="snap">Snap to presets</div>
+                <div class="combobox-option selected" data-value="free">Free / exact</div>
               </div>
             </div>
           </div>
@@ -1282,10 +1282,10 @@ input[type="range"]::-webkit-slider-thumb {
           <div class="field">
             <div class="field-info"><div class="field-label">Scroll direction</div><div class="field-desc">Modifier+wheel focus convention: Mac uses down-left/up-right; Windows uses down-right/up-left</div></div>
             <div class="combobox" id="cb-gestures-scroll_direction">
-              <button class="combobox-trigger" type="button"><span class="combobox-text">Mac</span><svg class="combobox-chevron" viewBox="0 0 12 12"><path d="M2.15 4.65a.5.5 0 01.7 0L6 7.79l3.15-3.14a.5.5 0 11.7.7l-3.5 3.5a.5.5 0 01-.7 0l-3.5-3.5a.5.5 0 010-.7z"/></svg></button>
+              <button class="combobox-trigger" type="button"><span class="combobox-text">Windows</span><svg class="combobox-chevron" viewBox="0 0 12 12"><path d="M2.15 4.65a.5.5 0 01.7 0L6 7.79l3.15-3.14a.5.5 0 11.7.7l-3.5 3.5a.5.5 0 01-.7 0l-3.5-3.5a.5.5 0 010-.7z"/></svg></button>
               <div class="combobox-popup">
-                <div class="combobox-option selected" data-value="mac">Mac</div>
-                <div class="combobox-option" data-value="windows">Windows</div>
+                <div class="combobox-option" data-value="mac">Mac</div>
+                <div class="combobox-option selected" data-value="windows">Windows</div>
               </div>
             </div>
           </div>
@@ -1440,7 +1440,7 @@ function val(id) { return document.getElementById(id).value; }
 function num(id) { return parseInt(document.getElementById(id).value, 10) || 0; }
 var selectedWidthPresetRow = null;
 var lastValidWidthPresets = [0.333, 0.5, 0.667];
-var lastValidDefaultWidthPreset = 1;
+var lastValidDefaultWidthPreset = 2;
 function addPresetRow(kind, value) {
   var tbody = document.getElementById(kind + '-presets-body');
   var tr = document.createElement('tr');
@@ -1554,7 +1554,7 @@ function init(cfg) {
   setVal('layout-outer_gap_bottom', cfg.layout.outer_gap_bottom);
   document.getElementById('width-presets-body').innerHTML = '';
   (cfg.layout.width_presets || [0.333,0.5,0.667]).forEach(function(v) { addPresetRow('width', v); });
-  refreshDefaultWidthPresetOptions(cfg.layout.default_width_preset || 1);
+  refreshDefaultWidthPresetOptions(cfg.layout.default_width_preset || 2);
   document.getElementById('height-presets-body').innerHTML = '';
   (cfg.layout.height_presets || [0.333,0.5,0.667]).forEach(function(v) { addPresetRow('height', v); });
   setCb('cb-layout-centering_mode', cfg.layout.centering_mode);
@@ -1590,7 +1590,7 @@ function init(cfg) {
   setCb('cb-behavior-log_level', cfg.behavior.log_level);
   setCb('cb-behavior-tab_close_action', cfg.behavior.tab_close_action || 'close_window');
   setCb('cb-behavior-new_window_placement', cfg.behavior.new_window_placement || 'new_column');
-  setCb('cb-behavior-resize_mode', cfg.behavior.resize_mode || 'snap');
+  setCb('cb-behavior-resize_mode', cfg.behavior.resize_mode || 'free');
   setCb('cb-overview-render', (cfg.overview && cfg.overview.render) || 'live');
 
   if (cfg.hotkeys) {
@@ -1617,7 +1617,7 @@ function init(cfg) {
   setCb('cb-gestures-swipe_down', cfg.gestures.swipe_down, true);
   setCb('cb-gestures-scroll_up', cfg.gestures.scroll_up, true);
   setCb('cb-gestures-scroll_down', cfg.gestures.scroll_down, true);
-  setCb('cb-gestures-scroll_direction', cfg.gestures.scroll_direction || 'mac');
+  setCb('cb-gestures-scroll_direction', cfg.gestures.scroll_direction || 'windows');
   updateScrollLabels();
 
   setChecked('snaphints-enabled', cfg.snap_hints.enabled);
@@ -2410,7 +2410,7 @@ mod tests {
     fn resize_mode_is_wired_into_settings_config() {
         assert!(SETTINGS_HTML.contains("id=\"cb-behavior-resize_mode\""));
         assert!(SETTINGS_HTML
-            .contains("setCb('cb-behavior-resize_mode', cfg.behavior.resize_mode || 'snap');"));
+            .contains("setCb('cb-behavior-resize_mode', cfg.behavior.resize_mode || 'free');"));
         assert!(SETTINGS_HTML.contains("resize_mode: cbVal('cb-behavior-resize_mode')"));
     }
 
@@ -2418,7 +2418,7 @@ mod tests {
     fn scroll_direction_is_wired_into_settings_config() {
         assert!(SETTINGS_HTML.contains("id=\"cb-gestures-scroll_direction\""));
         assert!(SETTINGS_HTML.contains(
-            "setCb('cb-gestures-scroll_direction', cfg.gestures.scroll_direction || 'mac');"
+            "setCb('cb-gestures-scroll_direction', cfg.gestures.scroll_direction || 'windows');"
         ));
         assert!(SETTINGS_HTML.contains("scroll_direction: cbVal('cb-gestures-scroll_direction')"));
     }
@@ -2432,7 +2432,7 @@ mod tests {
             !SETTINGS_HTML.contains("<input type=\"number\" id=\"layout-default_width_preset\"")
         );
         assert!(SETTINGS_HTML
-            .contains("refreshDefaultWidthPresetOptions(cfg.layout.default_width_preset || 1);"));
+            .contains("refreshDefaultWidthPresetOptions(cfg.layout.default_width_preset || 2);"));
         assert!(SETTINGS_HTML.contains("option.presetRow = entry.row;"));
         assert!(SETTINGS_HTML.contains("'Preset ' + (index + 1) + ' ('"));
         assert!(SETTINGS_HTML

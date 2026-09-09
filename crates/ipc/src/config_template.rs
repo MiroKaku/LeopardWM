@@ -44,8 +44,8 @@ outer_gap_bottom = {outer_gap}
 width_presets = [0.333, 0.5, 0.667]
 
 # Which preset new columns open at (1-based index into width_presets).
-# 1 = first preset. Out-of-range values fall back to the first preset.
-default_width_preset = 1
+# 2 = second preset (0.5). Out-of-range values fall back to the first preset.
+default_width_preset = 2
 
 # Height presets (fractions of column height / weight).
 height_presets = [0.333, 0.5, 0.667]
@@ -65,9 +65,9 @@ focus_new_windows = true
 # Track focus changes from Windows (sync with Alt-Tab, etc.)
 track_focus_changes = true
 
-# How border-drag resize is applied: "snap" (default, nearest preset) or
-# "free" (keep the exact dragged width and height).
-resize_mode = "snap"
+# How border-drag resize is applied: "free" (default, keep the exact dragged
+# width and height) or "snap" (nearest preset).
+resize_mode = "free"
 
 # Log level: trace, debug, info, warn, error
 log_level = "info"
@@ -123,9 +123,9 @@ swipe_left = "focus_left"
 swipe_right = "focus_right"
 swipe_up = "focus_up"
 swipe_down = "focus_down"
-# Modifier+wheel focus direction: "mac" (down=left, up=right) or
-# "windows" (down=right, up=left).
-scroll_direction = "mac"
+# Modifier+wheel focus direction: "windows" (default, down=right, up=left) or
+# "mac" (down=left, up=right).
+scroll_direction = "windows"
 
 [snap_hints]
 # Visual snap hint overlays during resize

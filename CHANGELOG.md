@@ -22,6 +22,11 @@ All notable changes to LeopardWM will be documented in this file.
   three-fifths of its height, with safe minimums and clamping for small
   displays; first summons remain centered.
 
+- **The default config now follows Windows-first defaults.** New installs and
+  regenerated configs use `default_width_preset = 2` (50% of the viewport),
+  `resize_mode = "free"`, and `scroll_direction = "windows"` instead of the
+  former 33% / snap / mac defaults. Existing explicit settings are untouched.
+
 ### Fixes
 
 - **New windows stay on the monitor where Windows opens them.** Monitor

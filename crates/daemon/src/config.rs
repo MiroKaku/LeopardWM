@@ -145,8 +145,8 @@ pub struct LayoutConfig {
     pub width_presets: Vec<f64>,
 
     /// Which width preset new columns open at, as a 1-based index into
-    /// `width_presets`. Defaults to 1 (the first preset). Out-of-range values
-    /// fall back to the first preset.
+    /// `width_presets`. Defaults to 2 (the second preset, 0.5). Out-of-range
+    /// values fall back to the first preset.
     #[serde(default = "default_width_preset")]
     pub default_width_preset: usize,
 
@@ -174,7 +174,7 @@ fn default_width_presets() -> Vec<f64> {
 }
 
 fn default_width_preset() -> usize {
-    1
+    2
 }
 
 fn default_height_presets() -> Vec<f64> {
@@ -370,11 +370,11 @@ pub enum TabCloseAction {
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ResizeMode {
-    /// Snap the dragged width and height to the configured presets.
-    #[default]
-    Snap,
     /// Keep the exact dragged width and height.
+    #[default]
     Free,
+    /// Snap the dragged width and height to the configured presets.
+    Snap,
 }
 
 /// Behavior-related configuration.
@@ -747,11 +747,11 @@ impl Default for HotkeyConfig {
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ScrollDirection {
-    /// Wheel down focuses left (`focus_prev`); wheel up focuses right.
-    #[default]
-    Mac,
     /// Wheel down focuses right (`focus_next`); wheel up focuses left.
+    #[default]
     Windows,
+    /// Wheel down focuses left (`focus_prev`); wheel up focuses right.
+    Mac,
 }
 
 /// Gesture bindings for touchpad support.
@@ -1845,24 +1845,24 @@ mod tests {
     fn test_default_column_width_px() {
         let config = LayoutConfig::default();
         // base = 1920 - 10 - 10 + 10 = 1910
-        // width = 0.333 * 1910 - 10 = 626
+        // width = 0.5 * 1910 - 10 = 945
         let width = config.default_column_width_px(1920);
         let base = 1920 - config.outer_gap_left - config.outer_gap_right + config.gap;
         assert_eq!(
             width,
-            (base as f64 * 0.333 - config.gap as f64).round() as i32
+            (base as f64 * 0.5 - config.gap as f64).round() as i32
         );
     }
 
     #[test]
     fn test_default_width_preset_selects_fraction() {
         let mut config = LayoutConfig::default();
-        // Default is preset 1 (0.333).
-        assert_eq!(config.default_width_fraction(), 0.333);
-
-        // Selecting the 2nd/3rd preset picks the matching fraction.
-        config.default_width_preset = 2;
+        // Default is preset 2 (0.5).
         assert_eq!(config.default_width_fraction(), 0.5);
+
+        // Selecting the 1st/3rd preset picks the matching fraction.
+        config.default_width_preset = 1;
+        assert_eq!(config.default_width_fraction(), 0.333);
         config.default_width_preset = 3;
         assert_eq!(config.default_width_fraction(), 0.667);
 
@@ -2078,9 +2078,9 @@ mod tests {
     }
 
     #[test]
-    fn test_resize_mode_defaults_snap() {
+    fn test_resize_mode_defaults_free() {
         let config = Config::default();
-        assert_eq!(config.behavior.resize_mode, ResizeMode::Snap);
+        assert_eq!(config.behavior.resize_mode, ResizeMode::Free);
     }
 
     #[test]
@@ -2094,9 +2094,9 @@ mod tests {
     }
 
     #[test]
-    fn test_scroll_direction_defaults_mac() {
+    fn test_scroll_direction_defaults_windows() {
         let config = Config::default();
-        assert_eq!(config.gestures.scroll_direction, ScrollDirection::Mac);
+        assert_eq!(config.gestures.scroll_direction, ScrollDirection::Windows);
     }
 
     #[test]
