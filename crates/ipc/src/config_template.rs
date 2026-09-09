@@ -116,6 +116,9 @@ focus_follows_mouse = false
 
 [hotkeys]
 {hotkeys}
+# Modifier keys required for mouse-wheel focus navigation (e.g. "Ctrl+Alt",
+# "Ctrl+Shift", "Win", or "CapsLock").
+scroll_modifier = "Ctrl+Alt"
 [gestures]
 # Touchpad gesture support
 enabled = true

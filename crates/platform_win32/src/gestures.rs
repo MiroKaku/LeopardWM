@@ -337,6 +337,7 @@ pub fn set_scroll_modifier(modifier_str: &str) {
             "alt" | "menu" => flags |= 0x02,
             "shift" => flags |= 0x04,
             "win" | "super" => flags |= 0x08,
+            "capslock" | "caps" => flags |= 0x10,
             _ => {}
         }
     }
@@ -345,6 +346,7 @@ pub fn set_scroll_modifier(modifier_str: &str) {
         flags = 0x03;
     }
     SCROLL_MODIFIER_FLAGS.store(flags, std::sync::atomic::Ordering::Relaxed);
+    crate::keyboard_hook::set_scroll_capslock_active(flags & 0x10 != 0);
     tracing::debug!(
         "Scroll modifier set to: {} (flags=0x{:02x})",
         modifier_str,
@@ -466,6 +468,7 @@ fn scroll_modifiers_held(flags: u8) -> bool {
         && (flags & 0x08 == 0
             || unsafe { GetAsyncKeyState(VK_LWIN) } < 0
             || unsafe { GetAsyncKeyState(VK_RWIN) } < 0)
+        && (flags & 0x10 == 0 || crate::keyboard_hook::capslock_held())
 }
 
 fn send_gesture_event(event: GestureEvent) {

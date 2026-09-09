@@ -57,6 +57,10 @@ static HOOK_FN_HELD: std::sync::Mutex<u16> = std::sync::Mutex::new(0);
 static HOOK_CAPSLOCK_USED: AtomicBool = AtomicBool::new(false);
 /// Whether CapsLock is currently held as a hotkey modifier.
 static HOOK_CAPSLOCK_HELD: AtomicBool = AtomicBool::new(false);
+/// Whether the scroll-wheels config also uses CapsLock as its modifier.
+/// Kept separate from bind-derived usage so `scroll_modifier = "CapsLock"`
+/// works even when no hotkey binding uses CapsLock.
+static SCROLL_CAPSLOCK_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 // Modifier virtual-key codes (both the generic and left/right variants the
 // low-level hook reports).
@@ -100,6 +104,18 @@ fn find_bind(binds: &[HotkeyBind], held: Modifiers, vk: u32) -> Option<HotkeyBin
         .copied()
 }
 
+/// Whether CapsLock is currently held as a hotkey modifier. The gestures/
+/// wheel hook uses this for `scroll_modifier = "CapsLock"`.
+pub fn capslock_held() -> bool {
+    HOOK_CAPSLOCK_HELD.load(Ordering::Relaxed)
+}
+
+/// Mark CapsLock as required by the scroll-wheel modifier even when no hotkey
+/// binding uses CapsLock, so the keyboard hook swallows and tracks it.
+pub fn set_scroll_capslock_active(active: bool) {
+    SCROLL_CAPSLOCK_ACTIVE.store(active, Ordering::Relaxed);
+}
+
 /// Handle for the keyboard hook. Dropping it signals the dedicated thread to
 /// unhook and exit, then clears the global state.
 pub struct KeyboardHookHandle {
@@ -140,6 +156,7 @@ impl Drop for KeyboardHookHandle {
         drop(fn_held);
         HOOK_CAPSLOCK_USED.store(false, Ordering::Relaxed);
         HOOK_CAPSLOCK_HELD.store(false, Ordering::Relaxed);
+        SCROLL_CAPSLOCK_ACTIVE.store(false, Ordering::Relaxed);
         tracing::debug!("Keyboard hook stopped");
     }
 }
@@ -192,7 +209,10 @@ pub fn install_keyboard_hook(
         })?;
         *fn_held = 0;
     }
-    HOOK_CAPSLOCK_USED.store(capslock_used, Ordering::Relaxed);
+    HOOK_CAPSLOCK_USED.store(
+        capslock_used || SCROLL_CAPSLOCK_ACTIVE.load(Ordering::Relaxed),
+        Ordering::Relaxed,
+    );
     HOOK_CAPSLOCK_HELD.store(false, Ordering::Relaxed);
 
     let (init_tx, init_rx) = std::sync::mpsc::channel::<Result<u32, Win32Error>>();
