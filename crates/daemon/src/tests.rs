@@ -2715,6 +2715,16 @@ fn test_matching_move_size_end_completes_resize_and_ignores_mismatch() {
 }
 
 #[test]
+fn test_resize_complete_starts_layout_transition() {
+    let mut state = two_managed_windows();
+    seed_resize_session(&mut state, 100);
+    state.handle_window_event(WindowEvent::MoveSizeEnd(100));
+
+    assert_eq!(state.resize_complete_count.load(Ordering::Relaxed), 1);
+    assert!(state.layout_transition.is_some());
+}
+
+#[test]
 fn test_stale_prune_cancels_matching_resize_and_leaves_peer() {
     let mut state = two_managed_windows();
     seed_resize_session(&mut state, 100);

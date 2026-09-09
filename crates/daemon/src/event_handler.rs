@@ -2772,6 +2772,15 @@ impl AppState {
         self.resize_complete_count
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let resize_edge = self.resize_edge;
+        let start_rects = {
+            let mut rects = self.last_placed_layout_rects.clone();
+            // The dragged window is already at the released size; animate from
+            // that physical rect rather than from the pre-drag layout rect.
+            if let Some(rect) = leopardwm_platform_win32::get_window_visible_rect(hwnd) {
+                rects.insert(hwnd, rect);
+            }
+            rects
+        };
         self.teardown_resize_preview_ui();
         let Some((monitor_id, ws_idx)) = self.find_window_workspace(hwnd) else {
             let _ = self.apply_layout();
@@ -2890,6 +2899,10 @@ impl AppState {
         // unchanged and skip repositioning, leaving the window at the
         // user-resized size instead of the column's preset width.
         self.last_placed_layout_rects.remove(&hwnd);
+        // Animate every affected window from the released geometry into the
+        // final snapped/neighbor-adjusted layout; without this the neighbor
+        // columns snap instantly on drop.
+        let _ = self.start_layout_transition(start_rects);
         if let Err(e) = self.apply_layout() {
             warn!("Failed to apply layout after resize snap: {}", e);
         }
