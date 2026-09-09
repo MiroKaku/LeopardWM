@@ -298,7 +298,7 @@ mod tests {
     }
 
     #[test]
-    fn test_middle_left_edge_resize_compensates_left_neighbor() {
+    fn test_middle_left_edge_resize_keeps_neighbor_width_and_shifts() {
         let mut ws = Workspace::with_gaps(10, 10);
         ws.insert_window(1, Some(400)).unwrap(); // x: 10-410
         ws.insert_window(2, Some(400)).unwrap(); // x: 420-820
@@ -308,16 +308,23 @@ mod tests {
         let old_placements = ws.compute_placements(viewport);
 
         // Dragging the middle column's left border left: the column widens,
-        // the left neighbor shrinks by the same delta, and the middle
-        // column's right edge stays fixed.
+        // the left neighbor keeps its width and shifts left with the boundary,
+        // the middle column's right edge stays fixed, and the right neighbor
+        // stays in place.
         ws.set_column_width_pixels(1, 500);
-        ws.adjust_neighbor_width_for_resize(1, 400, true);
+        let col_x = ws.column_x(1);
+        let col_width = ws.columns()[1].width();
+        let outer_left = ws.outer_gaps().0;
+        let target_scroll =
+            (col_x + col_width + viewport.x + outer_left - old_placements[1].rect.right()) as f64;
+        ws.set_scroll_offset(target_scroll);
 
         let placements = ws.compute_placements(viewport);
-        assert_eq!(placements[0].rect.width, 300);
+        assert_eq!(placements[0].rect.width, 400);
         assert_eq!(placements[1].rect.width, 500);
         assert_eq!(placements[1].rect.right(), old_placements[1].rect.right());
         assert_eq!(placements[2].rect.x, old_placements[2].rect.x);
+        assert_eq!(placements[0].rect.x, old_placements[0].rect.x - 100);
     }
 
     #[test]

@@ -2751,7 +2751,6 @@ impl AppState {
             .get_mut(&monitor_id)
             .and_then(|v| v.get_mut(ws_idx))
         {
-            let old_focused_width = ws.column(col_idx).map_or(0, |c| c.width());
             if free_resize {
                 ws.set_column_width_pixels(col_idx, visible_rect.width);
             } else {
@@ -2763,29 +2762,21 @@ impl AppState {
                 );
             }
 
-            // Left-edge drag:
-            // - Non-leftmost column: the boundary is shared with the left
-            //   neighbor. Compensate that neighbor by the opposite delta so
-            //   both columns stay on-screen and the combined width is stable.
-            // - Leftmost column: the OS moves the window's left border while
-            //   its right border stays fixed. Scroll the strip so the model's
-            //   right edge lands on the actual right edge, keeping right-side
-            //   neighbors in place. `set_scroll_offset` deliberately bypasses
-            //   the content clamp so the column can overhang the left edge.
+            // Left-edge drag: the OS keeps the window's right border fixed
+            // while the left border moves. Scroll the strip so the model's
+            // right edge lands on the actual right edge; columns left of the
+            // boundary shift while every column keeps its width (niri-style
+            // follow, no neighbor shrink/grow).
             if self.resize_edge == Some(ResizeEdge::Left) {
                 ws.cancel_animation();
-                if col_idx > 0 {
-                    ws.adjust_neighbor_width_for_resize(col_idx, old_focused_width, true);
-                } else {
-                    let target_scroll = {
-                        let column = ws.column(col_idx);
-                        let col_x = ws.column_x(col_idx);
-                        let col_width = column.map_or(0, |c| c.width());
-                        let outer_left = ws.outer_gaps().0;
-                        (col_x + col_width + work_area.x + outer_left - visible_rect.right()) as f64
-                    };
-                    ws.set_scroll_offset(target_scroll);
-                }
+                let target_scroll = {
+                    let column = ws.column(col_idx);
+                    let col_x = ws.column_x(col_idx);
+                    let col_width = column.map_or(0, |c| c.width());
+                    let outer_left = ws.outer_gaps().0;
+                    (col_x + col_width + work_area.x + outer_left - visible_rect.right()) as f64
+                };
+                ws.set_scroll_offset(target_scroll);
             }
         }
 
@@ -2941,7 +2932,6 @@ impl AppState {
             .and_then(|v| v.get_mut(ws_idx))
         {
             if let Some((col_idx, win_idx)) = ws.find_window_location(hwnd) {
-                let old_focused_width = ws.column(col_idx).map_or(0, |c| c.width());
                 if free_resize {
                     ws.set_column_width_pixels(col_idx, visible_rect.width);
 
@@ -3000,10 +2990,13 @@ impl AppState {
                 }
 
                 if resize_edge == Some(ResizeEdge::Left) && col_idx > 0 {
-                    ws.adjust_neighbor_width_for_resize(col_idx, old_focused_width, true);
+                    // Keep the scroll offset set during the live preview so
+                    // the released left-edge boundary stays where the user
+                    // dropped it: all columns keep their width and the left
+                    // neighbors follow the boundary (niri-style).
+                } else {
+                    ws.ensure_focused_visible_animated(viewport_width);
                 }
-
-                ws.ensure_focused_visible_animated(viewport_width);
             }
         }
 

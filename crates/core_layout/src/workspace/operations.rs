@@ -126,41 +126,6 @@ impl Workspace {
         }
     }
 
-    /// Move a resize boundary by shrinking/growing the adjacent column by the
-    /// opposite delta, keeping the two columns' combined width stable.
-    ///
-    /// `old_focused_width` is the focused column's width before the drag; the
-    /// focused column has already been resized. `left_edge` selects the left
-    /// neighbor (`true`) or the right neighbor (`false`).
-    pub fn adjust_neighbor_width_for_resize(
-        &mut self,
-        col_idx: usize,
-        old_focused_width: i32,
-        left_edge: bool,
-    ) {
-        let Some(focused_width) = self.columns.get(col_idx).map(|c| c.width()) else {
-            return;
-        };
-        let delta = focused_width - old_focused_width;
-        if delta == 0 {
-            return;
-        }
-
-        let neighbor_idx = if left_edge {
-            col_idx.checked_sub(1)
-        } else {
-            (col_idx + 1 < self.columns.len()).then_some(col_idx + 1)
-        };
-        let Some(neighbor_idx) = neighbor_idx else {
-            return;
-        };
-        let Some(old_neighbor_width) = self.columns.get(neighbor_idx).map(|c| c.width()) else {
-            return;
-        };
-
-        self.set_column_width_pixels(neighbor_idx, old_neighbor_width - delta);
-    }
-
     /// Move the focused column left (swap with the column to its left).
     pub fn move_column_left(&mut self) {
         if self.focused_column > 0 {

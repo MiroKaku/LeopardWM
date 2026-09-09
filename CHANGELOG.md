@@ -29,6 +29,11 @@ All notable changes to LeopardWM will be documented in this file.
 
 ### Fixes
 
+- **Left-edge resize now follows niri-style boundary movement.** Dragging a
+  column's left border shifts the columns left of that boundary instead of
+  shrinking/growing the adjacent column; the live scroll offset is preserved
+  on release so the drop position stays where the user left it.
+
 - **New windows stay on the monitor where Windows opens them.** Monitor
   selection uses opening bounds when they map to an attached monitor; otherwise
   it retains the focused monitor, while preserving fullscreen stacking without
