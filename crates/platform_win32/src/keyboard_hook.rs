@@ -13,6 +13,7 @@ use crate::{
     fn_mod_bit, recover_poisoned_mutex, HotkeyEvent, HotkeyId, Modifiers, Win32Error,
     WM_QUIT_LLHOOK_THREAD,
 };
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::Threading::GetCurrentThreadId;
@@ -51,6 +52,11 @@ static HOOK_FN_MOD_MASK: std::sync::Mutex<u16> = std::sync::Mutex::new(0);
 /// Which masked F13–F24 modifiers are currently held. Maintained from the hook's
 /// own key-down/up events (a swallowed key never updates `GetAsyncKeyState`).
 static HOOK_FN_HELD: std::sync::Mutex<u16> = std::sync::Mutex::new(0);
+/// Whether any bind uses CapsLock as a modifier. While true, the physical
+/// CapsLock key is swallowed and tracked instead of toggling uppercase.
+static HOOK_CAPSLOCK_USED: AtomicBool = AtomicBool::new(false);
+/// Whether CapsLock is currently held as a hotkey modifier.
+static HOOK_CAPSLOCK_HELD: AtomicBool = AtomicBool::new(false);
 
 // Modifier virtual-key codes (both the generic and left/right variants the
 // low-level hook reports).
@@ -65,6 +71,7 @@ const VK_LCONTROL: i32 = 0xA2;
 const VK_RCONTROL: i32 = 0xA3;
 const VK_LMENU: i32 = 0xA4;
 const VK_RMENU: i32 = 0xA5;
+const VK_CAPITAL: i32 = 0x14;
 
 fn is_modifier_vk(vk: i32) -> bool {
     matches!(
@@ -130,6 +137,9 @@ impl Drop for KeyboardHookHandle {
         drop(mask);
         let mut fn_held = HOOK_FN_HELD.lock().unwrap_or_else(recover_poisoned_mutex);
         *fn_held = 0;
+        drop(fn_held);
+        HOOK_CAPSLOCK_USED.store(false, Ordering::Relaxed);
+        HOOK_CAPSLOCK_HELD.store(false, Ordering::Relaxed);
         tracing::debug!("Keyboard hook stopped");
     }
 }
@@ -157,6 +167,7 @@ pub fn install_keyboard_hook(
     let fn_mod_mask = binds
         .iter()
         .fold(0u16, |mask, b| mask | b.modifiers.fn_mods);
+    let capslock_used = binds.iter().any(|b| b.modifiers.capslock);
     {
         let mut b = HOOK_BINDS
             .lock()
@@ -181,6 +192,8 @@ pub fn install_keyboard_hook(
         })?;
         *fn_held = 0;
     }
+    HOOK_CAPSLOCK_USED.store(capslock_used, Ordering::Relaxed);
+    HOOK_CAPSLOCK_HELD.store(false, Ordering::Relaxed);
 
     let (init_tx, init_rx) = std::sync::mpsc::channel::<Result<u32, Win32Error>>();
 
@@ -270,6 +283,13 @@ unsafe fn keyboard_ll_hook_inner(ncode: i32, wparam: WPARAM, lparam: LPARAM) -> 
 
     // On key-up, drop the key from the held set so its next press fires again.
     if msg == WM_KEYUP || msg == WM_SYSKEYUP {
+        // Swallow CapsLock's key-up when it was claimed as a hotkey modifier.
+        if vk == VK_CAPITAL
+            && HOOK_CAPSLOCK_USED.load(Ordering::Relaxed)
+            && HOOK_CAPSLOCK_HELD.swap(false, Ordering::Relaxed)
+        {
+            return LRESULT(1);
+        }
         // Swallow the up of an F-key we actually claimed as a held modifier (its
         // key-down was swallowed too, so the app never sees the key at all).
         // Gate on the held bit, not the mask: if a config reload added this key
@@ -291,6 +311,13 @@ unsafe fn keyboard_ll_hook_inner(ncode: i32, wparam: WPARAM, lparam: LPARAM) -> 
 
     if msg != WM_KEYDOWN && msg != WM_SYSKEYDOWN {
         return CallNextHookEx(None, ncode, wparam, lparam);
+    }
+
+    // CapsLock used as a hotkey modifier: record it held and swallow the
+    // key-down so it never toggles uppercase and never reaches the app.
+    if vk == VK_CAPITAL && HOOK_CAPSLOCK_USED.load(Ordering::Relaxed) {
+        HOOK_CAPSLOCK_HELD.store(true, Ordering::Relaxed);
+        return LRESULT(1);
     }
 
     // Modifier key-downs never match a bind on their own — pass through so the
@@ -343,6 +370,9 @@ unsafe fn keyboard_ll_hook_inner(ncode: i32, wparam: WPARAM, lparam: LPARAM) -> 
         alt: GetAsyncKeyState(VK_LMENU) < 0,
         shift: GetAsyncKeyState(VK_LSHIFT) < 0 || GetAsyncKeyState(VK_RSHIFT) < 0,
         win: GetAsyncKeyState(VK_LWIN) < 0 || GetAsyncKeyState(VK_RWIN) < 0,
+        // CapsLock comes from our own tracking, not GetAsyncKeyState: the key
+        // was swallowed, so the OS never registered it held.
+        capslock: HOOK_CAPSLOCK_HELD.load(Ordering::Relaxed),
         // F13–F24 modifiers come from our own tracking, not GetAsyncKeyState:
         // the masked keys were swallowed, so the OS never registered them held.
         fn_mods: *HOOK_FN_HELD.lock().unwrap_or_else(recover_poisoned_mutex),

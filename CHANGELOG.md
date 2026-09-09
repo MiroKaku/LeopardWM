@@ -29,6 +29,9 @@ All notable changes to LeopardWM will be documented in this file.
 
 ### Fixes
 
+- **CapsLock can now be used as a hotkey modifier.** Config strings like
+  `CapsLock+H` are parsed by the daemon and the keyboard hook swallows the
+  key while a CapsLock hotkey is registered, so it never toggles uppercase.
 - **Border resize only acts on the focused window.** Grabbing a non-focused
   window's border first focuses that window, so the daemon tracks and applies
   the resize against its own column instead of a stale neighbor. Focus from a

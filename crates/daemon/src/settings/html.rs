@@ -1748,6 +1748,7 @@ function chordParts(mods) {
   if (mods.alt) parts.push('Alt');
   if (mods.win) parts.push('Win');
   if (mods.shift) parts.push('Shift');
+  if (mods.capslock) parts.push('CapsLock');
   return parts;
 }
 /* Tell the daemon to suspend/resume global hotkeys around recording, so the
@@ -1765,6 +1766,8 @@ function exitRecording(input) {
    Kept sorted F13..F24 so equivalent combos render identically. */
 function fnModList(set) {
   return Array.from(set).sort(function(a, b) {
+    if (a === 'CapsLock') return -1;
+    if (b === 'CapsLock') return 1;
     return parseInt(a.slice(1), 10) - parseInt(b.slice(1), 10);
   });
 }
@@ -1796,6 +1799,12 @@ function attachRecorder(input) {
      trigger; otherwise it was only a modifier and is dropped from the held set. */
   input.addEventListener('keyup', function(e) {
     if (!input.classList.contains('recording')) return;
+    if (e.code === 'CapsLock' && extraMods.has('CapsLock')) {
+      e.preventDefault();
+      extraMods.delete('CapsLock');
+      if (!chorded) input.value = '';
+      return;
+    }
     if (!/^F(1[3-9]|2[0-4])$/.test(e.code) || !extraMods.has(e.code)) return;
     extraMods.delete(e.code);
     if (extraMods.size === 0 && !chorded) {
@@ -1828,6 +1837,13 @@ function attachRecorder(input) {
     if (/^F(1[3-9]|2[0-4])$/.test(e.code)) {
       e.preventDefault();
       extraMods.add(e.code);
+      input.value = chordParts(mods).concat(fnModList(extraMods)).join('+') + '+…';
+      return;
+    }
+    /* CapsLock: hold as a modifier in progress. */
+    if (e.code === 'CapsLock') {
+      e.preventDefault();
+      extraMods.add('CapsLock');
       input.value = chordParts(mods).concat(fnModList(extraMods)).join('+') + '+…';
       return;
     }
@@ -1880,8 +1896,8 @@ function addHotkeyRow(key, cmd) {
    "Win+Ctrl+Escape" and "Ctrl+Win+Escape" bucket as distinct and a real clash
    slips through. */
 function normalizeCombo(v) {
-  var order = { Ctrl: 0, Alt: 1, Win: 2, Shift: 3 };
-  for (var n = 13; n <= 24; n++) { order['F' + n] = n - 9; } /* F13..F24 sort after Shift */
+  var order = { Ctrl: 0, Alt: 1, Win: 2, Shift: 3, CapsLock: 4 };
+  for (var n = 13; n <= 24; n++) { order['F' + n] = n - 8; } /* F13..F24 sort after CapsLock */
   var parts = v.split('+').map(function(p) { return p.trim(); }).filter(Boolean);
   var mods = parts.filter(function(p) { return p in order; }).sort(function(a, b) { return order[a] - order[b]; });
   var keys = parts.filter(function(p) { return !(p in order); });

@@ -50,6 +50,9 @@ pub struct Modifiers {
     pub alt: bool,
     pub shift: bool,
     pub win: bool,
+    /// CapsLock held as a modifier. The hook swallows the key so it cannot
+    /// toggle uppercase while used for hotkeys.
+    pub capslock: bool,
     /// F13–F24 held as modifiers. Bit `i` (0..=11) is F13+`i` (vk 0x7C..=0x87).
     pub fn_mods: u16,
 }
@@ -95,7 +98,8 @@ impl Modifiers {
             | (self.alt as i32) << 1
             | (self.shift as i32) << 2
             | (self.win as i32) << 3
-            | (self.fn_mods as i32) << 4
+            | (self.capslock as i32) << 4
+            | (self.fn_mods as i32) << 5
     }
 }
 
@@ -702,6 +706,7 @@ pub fn parse_hotkey_string(s: &str) -> Option<(Modifiers, u32)> {
             "ALT" => modifiers.alt = true,
             "SHIFT" => modifiers.shift = true,
             "WIN" | "SUPER" | "META" => modifiers.win = true,
+            "CAPSLOCK" | "CAPS" => modifiers.capslock = true,
             // F13–F24 may act as modifiers; F1–F12 may not. Anything else is
             // an unknown modifier and rejects the whole hotkey string.
             other => modifiers.fn_mods |= parse_vk(other).and_then(fn_mod_bit)?,
@@ -1058,6 +1063,15 @@ mod tests {
         assert_eq!(mods.fn_mods, fn_mod_bit(0x7C).unwrap());
         assert!(!mods.ctrl && !mods.alt && !mods.shift && !mods.win);
         assert_eq!(vk, super::vk::H);
+
+        // CapsLock as a modifier.
+        let (mods, vk) = parse_hotkey_string("CapsLock+H").unwrap();
+        assert!(mods.capslock);
+        assert!(!mods.ctrl && !mods.alt && !mods.shift && !mods.win);
+        assert_eq!(mods.fn_mods, 0);
+        assert_eq!(vk, super::vk::H);
+        let (mods, _) = parse_hotkey_string("caps+shift+h").unwrap();
+        assert!(mods.capslock && mods.shift);
 
         // Multiple F-key modifiers combine.
         let (mods, vk) = parse_hotkey_string("F13+F14+H").unwrap();
