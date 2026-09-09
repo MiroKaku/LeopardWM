@@ -271,6 +271,33 @@ mod tests {
     }
 
     #[test]
+    fn test_left_edge_resize_scroll_keeps_right_edge_stationary() {
+        let mut ws = Workspace::with_gaps(10, 10);
+        ws.insert_window(1, Some(400)).unwrap(); // x: 10-410
+        ws.insert_window(2, Some(400)).unwrap(); // x: 420-820
+        ws.insert_window(3, Some(400)).unwrap(); // x: 830-1230
+
+        let viewport = Rect::new(0, 0, 1920, 600);
+        let old_placements = ws.compute_placements(viewport);
+        let old_right = old_placements[0].rect.right();
+
+        // Simulate expanding the first column through its left border: the
+        // OS keeps the right edge fixed while the width grows. Adjust the
+        // scroll offset the same way update_resize_preview does.
+        ws.set_column_width_pixels(0, 500);
+        let col_x = ws.column_x(0);
+        let col_width = ws.columns()[0].width();
+        let outer_left = ws.outer_gaps().0;
+        let target_scroll = (col_x + col_width + viewport.x + outer_left - old_right) as f64;
+        ws.set_scroll_offset(target_scroll);
+
+        let placements = ws.compute_placements(viewport);
+        assert_eq!(placements[0].rect.right(), old_right);
+        assert_eq!(placements[1].rect.x, old_placements[1].rect.x);
+        assert_eq!(placements[2].rect.x, old_placements[2].rect.x);
+    }
+
+    #[test]
     fn test_ensure_focused_visible_center() {
         let mut ws = Workspace::with_gaps(10, 10);
         ws.set_centering_mode(CenteringMode::Center);

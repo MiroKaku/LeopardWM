@@ -2,8 +2,8 @@
 
 use crate::config;
 use crate::state::{
-    AppState, ApplicationFullscreenState, DragHintAction, DragState, EDIT_CONFIG_PULL_TTL,
-    FALLBACK_VIEWPORT_HEIGHT, FALLBACK_VIEWPORT_WIDTH, RECENTLY_HIDDEN_TTL,
+    AppState, ApplicationFullscreenState, DragHintAction, DragState, ResizeEdge,
+    EDIT_CONFIG_PULL_TTL, FALLBACK_VIEWPORT_HEIGHT, FALLBACK_VIEWPORT_WIDTH, RECENTLY_HIDDEN_TTL,
     TRANSIENT_WINDOW_THRESHOLD,
 };
 use leopardwm_core_layout::Rect;
@@ -1965,6 +1965,7 @@ impl AppState {
     fn clear_resize_preview_state(&mut self) {
         self.resize_preview_cancel
             .store(true, std::sync::atomic::Ordering::Relaxed);
+        self.resize_edge = None;
         self.resize_preview_target = None;
         self.resize_preview_target_rects.clear();
         self.resize_preview_display_rect = None;
@@ -2009,6 +2010,15 @@ impl AppState {
         if leopardwm_platform_win32::is_cursor_on_resize_border(hwnd) {
             debug!("Detected resize (not move) for window {}, tracking", hwnd);
             self.resize_hwnd = Some(hwnd);
+            self.resize_edge = leopardwm_platform_win32::get_cursor_pos()
+                .zip(leopardwm_platform_win32::get_window_visible_rect(hwnd))
+                .map(|((cx, _), rect)| {
+                    if cx < rect.x + (rect.width / 2) {
+                        ResizeEdge::Left
+                    } else {
+                        ResizeEdge::Right
+                    }
+                });
             return;
         }
 
@@ -2694,6 +2704,55 @@ impl AppState {
         let free_resize = self.config.behavior.resize_mode == config::ResizeMode::Free;
         let width_presets = self.config.layout.width_presets.clone();
         let height_presets = self.config.layout.height_presets.clone();
+        let viewport_width = self.viewport_width_for(monitor_id);
+
+        let Some((col_idx, _)) = self
+            .workspaces
+            .get(&monitor_id)
+            .and_then(|v| v.get(ws_idx))
+            .and_then(|ws| ws.find_window_location(hwnd))
+        else {
+            return;
+        };
+
+        // Commit the dragged width into the model, then apply layout while
+        // excluding the OS-owned resized window. Neighbors move live instead
+        // of waiting for release.
+        if let Some(ws) = self
+            .workspaces
+            .get_mut(&monitor_id)
+            .and_then(|v| v.get_mut(ws_idx))
+        {
+            if free_resize {
+                ws.set_column_width_pixels(col_idx, visible_rect.width);
+            } else {
+                ws.snap_column_width_to_preset(
+                    col_idx,
+                    visible_rect.width,
+                    &width_presets,
+                    viewport_width,
+                );
+            }
+
+            // Left-edge drag: the OS moves the window's left border while its
+            // right border stays fixed. Scroll the strip so the model's right
+            // edge lands on the actual right edge, keeping left-side neighbors
+            // in place instead of pushing them off-screen. The width committed
+            // above expands the column into the area left of the viewport;
+            // `set_scroll_offset` deliberately bypasses the usual content
+            // clamp so the column can overhang the left edge.
+            if self.resize_edge == Some(ResizeEdge::Left) {
+                ws.cancel_animation();
+                let target_scroll = {
+                    let column = ws.column(col_idx);
+                    let col_x = ws.column_x(col_idx);
+                    let col_width = column.map_or(0, |c| c.width());
+                    let outer_left = ws.outer_gaps().0;
+                    (col_x + col_width + work_area.x + outer_left - visible_rect.right()) as f64
+                };
+                ws.set_scroll_offset(target_scroll);
+            }
+        }
 
         let preview_rects = self
             .workspaces
@@ -2743,28 +2802,6 @@ impl AppState {
             return;
         }
 
-        // Commit the dragged width into the model, then apply layout while
-        // excluding the OS-owned resized window. Neighbors move live instead
-        // of waiting for release.
-        let viewport_width = self.viewport_width_for(monitor_id);
-        if let Some(ws) = self
-            .workspaces
-            .get_mut(&monitor_id)
-            .and_then(|v| v.get_mut(ws_idx))
-        {
-            if let Some((col_idx, _)) = ws.find_window_location(hwnd) {
-                if free_resize {
-                    ws.set_column_width_pixels(col_idx, visible_rect.width);
-                } else {
-                    ws.snap_column_width_to_preset(
-                        col_idx,
-                        visible_rect.width,
-                        &width_presets,
-                        viewport_width,
-                    );
-                }
-            }
-        }
         self.show_border(hwnd);
         let _ = self.apply_layout();
 

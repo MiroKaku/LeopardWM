@@ -3,7 +3,7 @@ use crate::*;
 use crate::workspace::Workspace;
 
 impl Workspace {
-    fn column_x(&self, column_index: usize) -> i32 {
+    pub fn column_x(&self, column_index: usize) -> i32 {
         self.column_x_with_minimized_handling(column_index, true)
     }
 

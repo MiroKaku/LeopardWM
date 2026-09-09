@@ -19,6 +19,13 @@ pub(crate) enum DragPreviewMode {
     SafeBand,
 }
 
+/// Side of a window border being dragged for resize.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ResizeEdge {
+    Left,
+    Right,
+}
+
 /// Tracks an in-progress window drag for column reorder.
 pub(crate) struct DragState {
     /// HWND being dragged.
@@ -455,6 +462,8 @@ pub(crate) struct AppState {
     /// Set on MoveSizeStart when cursor is on resize border, cleared on MoveSizeEnd.
     /// While set, layout snap-back is suppressed to prevent jitter.
     pub(crate) resize_hwnd: Option<u64>,
+    /// Which border is being dragged during resize; used for left-edge scroll handling.
+    pub(crate) resize_edge: Option<ResizeEdge>,
     /// Throttle timestamp for resize preview hint updates (~60fps).
     pub(crate) last_resize_hint_update: Option<std::time::Instant>,
     /// Current snap target rect during resize (for change detection).
@@ -847,6 +856,7 @@ impl AppState {
             display_change_needs_full: false,
             drag_state: None,
             resize_hwnd: None,
+            resize_edge: None,
             last_resize_hint_update: None,
             resize_preview_target: None,
             resize_preview_target_rects: Vec::new(),
