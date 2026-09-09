@@ -2508,31 +2508,27 @@ mod tests {
     }
 
     #[test]
-    fn test_adjust_neighbor_width_for_resize_left_edge() {
-        let mut ws = Workspace::new();
+    fn test_resize_column_keeps_other_columns_and_shifts_them() {
+        let mut ws = Workspace::with_gaps(10, 10);
         ws.insert_window(1, Some(400)).unwrap();
-        ws.insert_window(2, Some(500)).unwrap();
+        ws.insert_window(2, Some(400)).unwrap();
+        ws.insert_window(3, Some(400)).unwrap();
+        let viewport = Rect::new(0, 0, 1920, 1080);
 
-        let old_right = ws.columns()[1].width();
-        ws.set_column_width_pixels(1, 700);
-        ws.adjust_neighbor_width_for_resize(1, old_right, true);
+        let before = ws.compute_placements(viewport);
+        let before_w2 = before.iter().find(|p| p.window_id == 2).unwrap().rect.x;
+        let before_w3 = before.iter().find(|p| p.window_id == 3).unwrap().rect.x;
 
-        assert_eq!(ws.columns()[0].width(), 200);
-        assert_eq!(ws.columns()[1].width(), 700);
-    }
-
-    #[test]
-    fn test_adjust_neighbor_width_for_resize_right_edge() {
-        let mut ws = Workspace::new();
-        ws.insert_window(1, Some(400)).unwrap();
-        ws.insert_window(2, Some(500)).unwrap();
-
-        let old_left = ws.columns()[0].width();
         ws.set_column_width_pixels(0, 600);
-        ws.adjust_neighbor_width_for_resize(0, old_left, false);
 
-        assert_eq!(ws.columns()[0].width(), 600);
-        assert_eq!(ws.columns()[1].width(), 300);
+        let after = ws.compute_placements(viewport);
+        let after_w2 = after.iter().find(|p| p.window_id == 2).unwrap().rect.x;
+        let after_w3 = after.iter().find(|p| p.window_id == 3).unwrap().rect.x;
+
+        assert_eq!(ws.columns()[1].width(), 400);
+        assert_eq!(ws.columns()[2].width(), 400);
+        assert_eq!(after_w2 - before_w2, 200);
+        assert_eq!(after_w3 - before_w3, 200);
     }
 
     #[test]
