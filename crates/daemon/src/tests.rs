@@ -6885,6 +6885,52 @@ fn test_created_event_focus_new_windows_false_preserves_focus() {
 }
 
 #[test]
+fn test_fullscreen_created_window_switches_to_next_empty_workspace() {
+    let mut state = AppState::new_with_config(test_config(), test_monitors());
+    let mon = state.focused_monitor;
+
+    state
+        .injected_window_info
+        .insert(100, make_test_window_info(100));
+    state.handle_window_event(WindowEvent::Created(100));
+    state
+        .workspaces
+        .get_mut(&mon)
+        .and_then(|v| v.get_mut(0))
+        .unwrap()
+        .toggle_fullscreen();
+
+    state
+        .injected_window_info
+        .insert(200, make_test_window_info(200));
+    state.handle_window_event(WindowEvent::Created(200));
+
+    assert_eq!(
+        state.active_workspace_idx(mon),
+        1,
+        "with focus_new_windows on, the new window's workspace becomes active"
+    );
+    assert!(
+        !state.workspaces[&mon][0].contains_window(200),
+        "new window must not join the fullscreen workspace"
+    );
+    assert!(
+        state.workspaces[&mon][1].contains_window(200),
+        "new window opens on the next empty workspace"
+    );
+    assert_eq!(
+        state.workspaces[&mon][0].fullscreen_window_id(),
+        Some(100),
+        "the fullscreen window remains on the original workspace"
+    );
+    assert_eq!(
+        state.focused_workspace().unwrap().focused_window(),
+        Some(200),
+        "focus follows the newcomer on the new workspace"
+    );
+}
+
+#[test]
 fn test_fullscreen_focus_guard() {
     use crate::event_handler::fullscreen_focus_guard;
     // User-initiated focus is always honored (no override).
@@ -7571,7 +7617,7 @@ fn test_created_event_on_other_monitor_ignores_fullscreen_on_focused_monitor() {
 }
 
 #[test]
-fn test_created_event_preserves_fullscreen_on_opening_monitor_without_focus() {
+fn test_created_event_preserves_fullscreen_and_moves_newcomer_to_next_workspace() {
     let mut config = test_config();
     config.behavior.focus_new_windows = false;
     let mut state = AppState::new_with_config(config, two_monitors());
@@ -7595,8 +7641,12 @@ fn test_created_event_preserves_fullscreen_on_opening_monitor_without_focus() {
     state.handle_window_event(WindowEvent::Created(300));
 
     assert!(
-        state.workspaces[&2][state.active_workspace_idx(2)].contains_window(300),
-        "window opens on the monitor whose workspace is fullscreen"
+        !state.workspaces[&2][0].contains_window(300),
+        "newcomer does not join the fullscreen workspace"
+    );
+    assert!(
+        state.workspaces[&2][1].contains_window(300),
+        "newcomer opens on the next workspace of the fullscreen monitor"
     );
     assert_eq!(
         state.workspaces[&2][0].fullscreen_window_id(),
@@ -7622,10 +7672,10 @@ fn test_created_event_preserves_fullscreen_on_opening_monitor_without_focus() {
 }
 
 #[test]
-fn test_new_window_while_fullscreen_keeps_fullscreen_focused() {
-    // A new window opened while a window is fullscreen must join the layout
-    // behind it; the fullscreen window stays focused and on top (monocle),
-    // rather than the newcomer stealing focus and rendering over it (#58).
+fn test_new_window_while_fullscreen_switches_next_workspace() {
+    // A new window opened while a window is fullscreen must open on the next
+    // workspace and switch to it; the fullscreen window stays behind on its
+    // original workspace, rather than the newcomer rendering over it (#58).
     let mut state = AppState::new_with_config(test_config(), test_monitors());
 
     state
@@ -7653,22 +7703,38 @@ fn test_new_window_while_fullscreen_keeps_fullscreen_focused() {
         .insert(200, make_test_window_info(200));
     state.handle_window_event(WindowEvent::Created(200));
 
-    let ws = state.focused_workspace().unwrap();
-    assert!(ws.contains_window(200), "new window joins the layout");
+    assert!(
+        !state.workspaces[&mid][0].contains_window(200),
+        "new window does not join the fullscreen workspace"
+    );
+    assert!(
+        state.workspaces[&mid][1].contains_window(200),
+        "new window opens on the next workspace"
+    );
     assert_eq!(
-        ws.fullscreen_window_id(),
+        state.active_workspace_idx(mid),
+        1,
+        "workspace switches to the newcomer"
+    );
+    assert_eq!(
+        state.workspaces[&mid][0].fullscreen_window_id(),
         Some(100),
         "fullscreen stays on the original window"
     );
     assert_eq!(
-        ws.focused_window(),
+        state.workspaces[&mid][0].focused_window(),
         Some(100),
-        "focus returns to the fullscreen window, not the newcomer"
+        "the fullscreen window keeps its local focus on the old workspace"
+    );
+    assert_eq!(
+        state.workspaces[&mid][1].focused_window(),
+        Some(200),
+        "the newcomer gets local focus on the new workspace"
     );
     assert_eq!(
         state.previous_focused_hwnd,
-        Some(100),
-        "tracked focus is the fullscreen window so the border/foreground follow it"
+        Some(200),
+        "tracked focus follows the newcomer"
     );
 }
 

@@ -503,6 +503,55 @@ impl AppState {
         }
     }
 
+    /// Whether the active workspace should be treated as fullscreen for new
+    /// window placement: an explicit workspace fullscreen, an application
+    /// fullscreen window, or any OS-maximized tiled window (which LeopardWM
+    /// cannot physically move).
+    fn active_workspace_is_fullscreen_like(
+        &self,
+        monitor_id: leopardwm_platform_win32::MonitorId,
+        active_idx: usize,
+    ) -> bool {
+        let Some(ws) = self
+            .workspaces
+            .get(&monitor_id)
+            .and_then(|v| v.get(active_idx))
+        else {
+            return false;
+        };
+        if ws.is_fullscreen() {
+            return true;
+        }
+        let ids = ws.all_window_ids();
+        ids.iter().any(|&wid| {
+            self.is_application_fullscreen(wid)
+                || leopardwm_platform_win32::is_window_maximized(wid)
+        })
+    }
+
+    /// Find the next workspace (0-based) that can hold a new window when the
+    /// active workspace is fullscreen. Prefers an empty workspace, scanning
+    /// forward with wraparound; falls back to the next workspace if all nine
+    /// are occupied.
+    fn workspace_for_fullscreen_new_window(
+        &self,
+        monitor_id: leopardwm_platform_win32::MonitorId,
+        active_idx: usize,
+    ) -> usize {
+        const COUNT: usize = 9;
+        let ws_vec = self.workspaces.get(&monitor_id);
+        for offset in 1..=COUNT {
+            let idx = (active_idx + offset) % COUNT;
+            let empty = ws_vec
+                .and_then(|v| v.get(idx))
+                .is_none_or(|ws| ws.all_window_ids().is_empty());
+            if empty {
+                return idx;
+            }
+        }
+        (active_idx + 1) % COUNT
+    }
+
     fn on_window_created(&mut self, hwnd: u64) {
         // Suppress transient windows that rapidly show/hide the same HWND
         // (e.g., Electron notification popups from Beeper, Slack).
@@ -664,22 +713,35 @@ impl AppState {
             // opens in the background (no focus steal, hidden until
             // that workspace is activated).
             let active_idx = self.active_workspace_idx(monitor_id);
+            let active_workspace_is_fullscreen =
+                self.active_workspace_is_fullscreen_like(monitor_id, active_idx);
             // A sticky window shows on every workspace, so it always opens on the
             // active one; an open_on_workspace would only hide it until a switch.
+            let fullscreen_target = if action == config::WindowAction::Tile
+                && !rule_sticky
+                && rule_workspace.is_none()
+                && active_workspace_is_fullscreen
+            {
+                Some(self.workspace_for_fullscreen_new_window(monitor_id, active_idx))
+            } else {
+                None
+            };
             let target_idx = if rule_sticky {
                 active_idx
             } else {
-                rule_workspace.unwrap_or(active_idx)
+                rule_workspace.or(fullscreen_target).unwrap_or(active_idx)
             };
-            let opens_in_background = target_idx != active_idx;
-            if opens_in_background {
+            let auto_swap_fullscreen =
+                fullscreen_target.is_some() && self.config.behavior.focus_new_windows;
+            let opens_in_background = target_idx != active_idx && !auto_swap_fullscreen;
+            if target_idx != active_idx {
                 self.ensure_workspace_exists(monitor_id, target_idx);
             }
 
             // Snapshot before structural change for tiled window
             // animation. A background open doesn't change the active
             // layout, so no transition is needed.
-            let snapshot = if action == config::WindowAction::Tile && !opens_in_background {
+            let snapshot = if action == config::WindowAction::Tile && target_idx == active_idx {
                 Some(self.snapshot_layout())
             } else {
                 None
@@ -800,7 +862,10 @@ impl AppState {
                         }
                         self.sticky_windows.insert(hwnd);
                     }
-                    if self.config.behavior.focus_new_windows && !opens_in_background {
+                    if self.config.behavior.focus_new_windows
+                        && !opens_in_background
+                        && !auto_swap_fullscreen
+                    {
                         self.focused_monitor = monitor_id;
                         if matches!(action, config::WindowAction::Float) {
                             self.previous_focused_hwnd = Some(hwnd);
@@ -813,6 +878,12 @@ impl AppState {
                         // switched to.
                         let _ = leopardwm_platform_win32::move_window_offscreen(hwnd);
                         leopardwm_platform_win32::taskbar::taskbar_hide(hwnd);
+                    }
+                    if auto_swap_fullscreen {
+                        // The newcomer belongs to a fresh workspace: switch to
+                        // it so the fullscreen window is left behind instead of
+                        // being overlaid.
+                        self.follow_workspace_without_stealing_focus(monitor_id, target_idx);
                     }
                     if let Some(snapshot) = snapshot {
                         self.start_layout_transition(snapshot);
@@ -833,17 +904,19 @@ impl AppState {
                     // the user leaves fullscreen. (A floating window is meant to
                     // overlay, and a background one is parked off-screen, so this
                     // is tiled-and-active only.)
-                    let keep_fullscreen_on_top =
-                        if matches!(action, config::WindowAction::Tile) && !opens_in_background {
-                            self.workspaces
-                                .get(&monitor_id)
-                                .and_then(|workspaces| workspaces.get(active_idx))
-                                .filter(|ws| ws.is_fullscreen())
-                                .and_then(|ws| ws.fullscreen_window_id())
-                                .filter(|&fs| fs != hwnd)
-                        } else {
-                            None
-                        };
+                    let keep_fullscreen_on_top = if matches!(action, config::WindowAction::Tile)
+                        && !opens_in_background
+                        && !auto_swap_fullscreen
+                    {
+                        self.workspaces
+                            .get(&monitor_id)
+                            .and_then(|workspaces| workspaces.get(active_idx))
+                            .filter(|ws| ws.is_fullscreen())
+                            .and_then(|ws| ws.fullscreen_window_id())
+                            .filter(|&fs| fs != hwnd)
+                    } else {
+                        None
+                    };
                     // Skip the newcomer's foreground sync when we're about to
                     // re-raise the fullscreen window, to avoid a double focus
                     // transition.

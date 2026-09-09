@@ -6,6 +6,13 @@ All notable changes to LeopardWM will be documented in this file.
 
 ### Features
 
+- **New tiled windows open on the next empty workspace when the active
+  workspace is fullscreen.** This covers explicit fullscreen, application
+  fullscreen, and OS-maximized windows, which LeopardWM cannot physically
+  move. With `focus_new_windows` enabled (the default), the daemon switches
+  to that workspace so the new window is usable immediately; with it disabled,
+  the window opens in the background and stays there until you switch
+  manually.
 - **Window rules can set their initial column width in Settings.** The rule
   Options menu accepts a viewport fraction from `0.05` to `1.0`, or a blank
   value for automatic sizing. Invalid values are highlighted without blocking
