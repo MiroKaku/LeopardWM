@@ -2394,11 +2394,13 @@ mod tests {
     #[test]
     fn test_window_rule_column_width_compilation_rejects_invalid_values() {
         fn compiled_width(width: f64) -> Option<f64> {
-            let mut config = Config::default();
-            config.window_rules = vec![WindowRule {
-                column_width: Some(width),
-                ..WindowRule::default()
-            }];
+            let config = Config {
+                window_rules: vec![WindowRule {
+                    column_width: Some(width),
+                    ..WindowRule::default()
+                }],
+                ..Config::default()
+            };
             config.compile_window_rules()[0].column_width
         }
 

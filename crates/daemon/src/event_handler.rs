@@ -1147,13 +1147,13 @@ impl AppState {
             if let Some(next) = self.injected_next_foreground_hwnd.take() {
                 self.injected_foreground_hwnd = Some(next);
             }
-            return foreground.map(|foreground| {
+            foreground.map(|foreground| {
                 (
                     foreground.filter(|&id| id != 0),
                     self.injected_foreground_is_valid
                         .unwrap_or(foreground.is_some_and(|id| id != 0)),
                 )
-            });
+            })
         }
         #[cfg(not(test))]
         {
@@ -2922,7 +2922,6 @@ impl AppState {
             }
             rects
         };
-        let resize_edge = self.resize_edge;
         self.teardown_resize_preview_ui();
         let Some((monitor_id, ws_idx)) = self.find_window_workspace(hwnd) else {
             let _ = self.apply_layout();
@@ -3021,15 +3020,6 @@ impl AppState {
                         hwnd,
                         ws.columns().get(col_idx).map(|c| c.width()).unwrap_or(0)
                     );
-                }
-
-                if resize_edge == Some(ResizeEdge::Left) && col_idx > 0 {
-                    // Keep the scroll offset set during the live preview so
-                    // the released left-edge boundary stays where the user
-                    // dropped it: all columns keep their width and the left
-                    // neighbors follow the boundary (niri-style).
-                } else {
-                    ws.ensure_focused_visible_animated(viewport_width);
                 }
             }
         }

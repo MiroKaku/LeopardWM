@@ -70,7 +70,7 @@ fn test_application_fullscreen_detector_uses_monitor_rect_tolerance() {
         scale_factor: 4.0,
     };
     let expected_rect = monitor.rect;
-    let monitors = vec![monitor];
+    let monitors = [monitor];
     assert_eq!(
         detect_application_fullscreen(
             monitors.iter(),
