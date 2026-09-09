@@ -2438,8 +2438,9 @@ impl AppState {
                 }
                 self.last_resize_hint_update = Some(now);
                 self.show_border(hwnd);
-            } else if self.config.snap_hints.enabled {
-                // Throttle preview updates to ~60fps
+            } else {
+                // Throttle preview updates to ~60fps; this path also
+                // applies live neighbor layout even when snap hints are off.
                 let now = std::time::Instant::now();
                 if self
                     .last_resize_hint_update
@@ -2742,6 +2743,34 @@ impl AppState {
             return;
         }
 
+        // Commit the dragged width into the model, then apply layout while
+        // excluding the OS-owned resized window. Neighbors move live instead
+        // of waiting for release.
+        let viewport_width = self.viewport_width_for(monitor_id);
+        if let Some(ws) = self
+            .workspaces
+            .get_mut(&monitor_id)
+            .and_then(|v| v.get_mut(ws_idx))
+        {
+            if let Some((col_idx, _)) = ws.find_window_location(hwnd) {
+                if free_resize {
+                    ws.set_column_width_pixels(col_idx, visible_rect.width);
+                } else {
+                    ws.snap_column_width_to_preset(
+                        col_idx,
+                        visible_rect.width,
+                        &width_presets,
+                        viewport_width,
+                    );
+                }
+            }
+        }
+        let _ = self.apply_layout();
+
+        if !self.config.snap_hints.enabled {
+            return;
+        }
+
         if self.resize_preview_target_rects == target_rects {
             // Target unchanged — if animation thread is driving the overlay, let it.
             if !self
@@ -2910,7 +2939,7 @@ impl AppState {
         // Animate every affected window from the released geometry into the
         // final niri-style layout; resize uses a dedicated shorter duration
         // so column moves can keep their heavier timing.
-        let _ = self.start_layout_transition_with_duration(
+        self.start_layout_transition_with_duration(
             start_rects,
             self.config.animation.resize_duration_ms,
         );

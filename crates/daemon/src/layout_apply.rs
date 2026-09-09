@@ -404,12 +404,15 @@ impl AppState {
 
         // Filter out the dragged window and placeholder so SetWindowPos doesn't
         // fight the OS drag or try to position the sentinel.
-        if let Some(ref drag) = self.drag_state {
+        if let Some(drag) = &self.drag_state {
             if drag.is_tiled {
                 all_placements.retain(|p| {
                     p.window_id != drag.hwnd && p.window_id != crate::state::DRAG_PLACEHOLDER_HWND
                 });
             }
+        }
+        if let Some(resize_hwnd) = self.resize_hwnd {
+            all_placements.retain(|p| p.window_id != resize_hwnd);
         }
 
         let dispatched_placements = self.filter_application_fullscreen_placements(all_placements);
@@ -526,12 +529,18 @@ impl AppState {
 
         // Filter out the dragged window and placeholder so SetWindowPos doesn't
         // fight the OS drag or try to position the sentinel.
-        if let Some(ref drag) = self.drag_state {
+        if let Some(drag) = &self.drag_state {
             if drag.is_tiled {
                 all_placements.retain(|p| {
                     p.window_id != drag.hwnd && p.window_id != crate::state::DRAG_PLACEHOLDER_HWND
                 });
             }
+        }
+        // During a border resize the OS owns the dragged window's rect; keep
+        // it out of apply_layout so neighbors can follow live without
+        // fighting the in-flight system resize.
+        if let Some(resize_hwnd) = self.resize_hwnd {
+            all_placements.retain(|p| p.window_id != resize_hwnd);
         }
 
         // Fast path: if every placement matches the last applied rect (and

@@ -320,6 +320,21 @@ fn test_application_fullscreen_session_filters_physical_dispatch_and_prunes() {
 }
 
 #[test]
+fn test_resize_apply_layout_excludes_resized_window() {
+    let mut state = AppState::new_with_config(test_config(), test_monitors());
+    state.paused = false;
+    let ws = state.focused_workspace_mut().unwrap();
+    ws.insert_window(100, Some(800)).unwrap();
+    ws.insert_window(200, Some(800)).unwrap();
+
+    state.resize_hwnd = Some(100);
+    state.apply_layout().unwrap();
+
+    assert!(state.last_placed_layout_rects.contains_key(&200));
+    assert!(!state.last_placed_layout_rects.contains_key(&100));
+}
+
+#[test]
 fn test_startup_maximize_hold_is_applied_to_each_animation_duration() {
     use leopardwm_core_layout::{Visibility, WindowPlacement};
     use std::collections::{HashMap, HashSet};
