@@ -885,9 +885,13 @@ impl Default for SnapHintConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AnimationConfig {
-    /// Column move / resize / tab-change transitions.
+    /// Column move / tab-change transitions.
     #[serde(default = "default_layout_duration")]
     pub layout_duration_ms: u64,
+
+    /// Window resize landing transitions (lighter by default).
+    #[serde(default = "default_resize_duration")]
+    pub resize_duration_ms: u64,
 
     /// Workspace switch transitions (intentionally a touch slower).
     #[serde(default = "default_workspace_switch_duration")]
@@ -933,6 +937,10 @@ fn default_overview_duration() -> u64 {
     150
 }
 
+fn default_resize_duration() -> u64 {
+    100
+}
+
 fn default_reduce_motion_on_battery() -> bool {
     true
 }
@@ -941,6 +949,7 @@ impl Default for AnimationConfig {
     fn default() -> Self {
         Self {
             layout_duration_ms: default_layout_duration(),
+            resize_duration_ms: default_resize_duration(),
             workspace_switch_duration_ms: default_workspace_switch_duration(),
             scroll_duration_ms: default_scroll_duration(),
             overview_duration_ms: default_overview_duration(),
@@ -1086,6 +1095,10 @@ impl Config {
             (
                 "animation.layout_duration_ms",
                 &mut self.animation.layout_duration_ms,
+            ),
+            (
+                "animation.resize_duration_ms",
+                &mut self.animation.resize_duration_ms,
             ),
             (
                 "animation.workspace_switch_duration_ms",
@@ -2455,6 +2468,7 @@ mod tests {
     fn test_animation_config_defaults() {
         let config = Config::default();
         assert_eq!(config.animation.layout_duration_ms, 150);
+        assert_eq!(config.animation.resize_duration_ms, 100);
         assert_eq!(config.animation.workspace_switch_duration_ms, 200);
         assert_eq!(config.animation.scroll_duration_ms, 200);
         assert_eq!(config.animation.overview_duration_ms, 150);
@@ -2512,8 +2526,27 @@ mod tests {
         );
         assert_eq!(config.animation.layout_duration_ms, 80);
         // Unspecified fields fall back to defaults.
+        assert_eq!(config.animation.resize_duration_ms, 100);
         assert_eq!(config.animation.scroll_duration_ms, 200);
         assert_eq!(config.animation.overview_duration_ms, 150);
+    }
+
+    #[test]
+    fn test_resize_duration_parses_and_clamps() {
+        let toml = "[animation]\nresize_duration_ms = 80\n";
+        let config: Config = toml::from_str(toml).expect("parse");
+        assert_eq!(config.animation.resize_duration_ms, 80);
+
+        let mut config = Config::default();
+        config.animation.resize_duration_ms = 99_999;
+        let warnings = config.validate();
+        assert_eq!(
+            config.animation.resize_duration_ms,
+            MAX_ANIMATION_DURATION_MS
+        );
+        assert!(warnings
+            .iter()
+            .any(|w| w.field == "animation.resize_duration_ms"));
     }
 
     #[test]

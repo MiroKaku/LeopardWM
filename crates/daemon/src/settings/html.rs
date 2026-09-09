@@ -1176,8 +1176,12 @@ input[type="range"]::-webkit-slider-thumb {
         <p class="section-desc">Transition timing. Durations in milliseconds; 0 snaps instantly.</p>
         <div class="card">
           <div class="field">
-            <div class="field-info"><div class="field-label">Layout duration</div><div class="field-desc">Column move / resize / tab changes (ms)</div></div>
+            <div class="field-info"><div class="field-label">Layout duration</div><div class="field-desc">Column move / tab changes (ms)</div></div>
             <input type="number" id="animation-layout_duration_ms" min="0" max="2000">
+          </div>
+          <div class="field">
+            <div class="field-info"><div class="field-label">Resize duration</div><div class="field-desc">Window resize landing animation (ms)</div></div>
+            <input type="number" id="animation-resize_duration_ms" min="0" max="2000">
           </div>
           <div class="field">
             <div class="field-info"><div class="field-label">Workspace switch duration</div><div class="field-desc">Switching workspaces (ms)</div></div>
@@ -1623,6 +1627,7 @@ function init(cfg) {
 
   var anim = cfg.animation || {};
   setVal('animation-layout_duration_ms', anim.layout_duration_ms != null ? anim.layout_duration_ms : 150);
+  setVal('animation-resize_duration_ms', anim.resize_duration_ms != null ? anim.resize_duration_ms : 100);
   setVal('animation-workspace_switch_duration_ms', anim.workspace_switch_duration_ms != null ? anim.workspace_switch_duration_ms : 200);
   setVal('animation-scroll_duration_ms', anim.scroll_duration_ms != null ? anim.scroll_duration_ms : 200);
   setVal('animation-overview_duration_ms', anim.overview_duration_ms != null ? anim.overview_duration_ms : 150);
@@ -2237,6 +2242,7 @@ function readConfig() {
     },
     animation: {
       layout_duration_ms: num('animation-layout_duration_ms'),
+      resize_duration_ms: num('animation-resize_duration_ms'),
       workspace_switch_duration_ms: num('animation-workspace_switch_duration_ms'),
       scroll_duration_ms: num('animation-scroll_duration_ms'),
       overview_duration_ms: num('animation-overview_duration_ms'),
@@ -2389,6 +2395,15 @@ mod tests {
         ));
         assert!(SETTINGS_HTML
             .contains("reduce_motion_on_battery: checked('animation-reduce_motion_on_battery')"));
+    }
+
+    #[test]
+    fn animation_resize_duration_is_wired_into_settings_config() {
+        assert!(SETTINGS_HTML.contains("id=\"animation-resize_duration_ms\""));
+        assert!(SETTINGS_HTML.contains(
+            "setVal('animation-resize_duration_ms', anim.resize_duration_ms != null ? anim.resize_duration_ms : 100);"
+        ));
+        assert!(SETTINGS_HTML.contains("resize_duration_ms: num('animation-resize_duration_ms')"));
     }
 
     #[test]

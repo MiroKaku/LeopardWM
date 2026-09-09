@@ -2532,6 +2532,34 @@ mod tests {
     }
 
     #[test]
+    fn test_preview_resize_rects_returns_all_columns() {
+        let mut ws = Workspace::with_gaps(10, 10);
+        ws.insert_window(1, Some(400)).unwrap();
+        ws.insert_window(2, Some(400)).unwrap();
+        ws.insert_window(3, Some(400)).unwrap();
+        let viewport = Rect::new(0, 0, 1920, 1080);
+
+        let before = ws.compute_placements(viewport);
+        let before_b = before.iter().find(|p| p.window_id == 2).unwrap().rect.x;
+        let before_c = before.iter().find(|p| p.window_id == 3).unwrap().rect.x;
+
+        let rects = ws
+            .preview_resize_exact_rects(1, 600, 600, viewport)
+            .expect("preview should resolve");
+        assert_eq!(rects.len(), 3);
+
+        let a = rects.iter().find(|(id, _)| *id == 1).unwrap().1;
+        let b = rects.iter().find(|(id, _)| *id == 2).unwrap().1;
+        let c = rects.iter().find(|(id, _)| *id == 3).unwrap().1;
+
+        assert_eq!(a.width, 600);
+        assert_eq!(b.x - before_b, 200);
+        assert_eq!(c.x - before_c, 200);
+        assert_eq!(b.width, 400);
+        assert_eq!(c.width, 400);
+    }
+
+    #[test]
     fn test_equalize_widths() {
         let mut ws = Workspace::with_gaps(10, 10);
         ws.insert_window(1, Some(300)).unwrap();

@@ -1452,8 +1452,8 @@ fn seed_resize_session(state: &mut AppState, hwnd: u64) {
     state.resize_preview_target = Some(Rect::new(0, 0, 800, 600));
     state.resize_preview_display_rect = Some(Rect::new(0, 0, 800, 600));
     state.pending_resize_animation = Some(ResizeAnimationRequest {
-        start_rect: Rect::new(0, 0, 800, 600),
-        target_rect: Rect::new(0, 0, 960, 600),
+        start_rects: vec![Rect::new(0, 0, 800, 600)],
+        target_rects: vec![Rect::new(0, 0, 960, 600)],
     });
     state.last_resize_hint_update = Some(std::time::Instant::now());
     state.pending_drag_hint = Some(DragHintAction::ShowGhost {

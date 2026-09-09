@@ -22,17 +22,10 @@ use leopardwm_core_layout::Rect;
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
-use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
-use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWINDOWATTRIBUTE};
-use windows::Win32::Graphics::Gdi::{
-    BeginPaint, CreateSolidBrush, DeleteObject, EndPaint, FillRect, InvalidateRect, PAINTSTRUCT,
-};
-use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW, PostMessageW,
-    RegisterClassW, SetWindowPos, ShowWindow, UnregisterClassW, HWND_TOPMOST, MSG, SWP_NOACTIVATE,
-    SWP_SHOWWINDOW, SW_HIDE, SW_SHOWNA, WM_PAINT, WM_USER, WNDCLASSW, WS_EX_LAYERED,
-    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
-};
+use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, POINT, SIZE, WPARAM};
+use windows::Win32::Graphics::Dwm::*;
+use windows::Win32::Graphics::Gdi::*;
+use windows::Win32::UI::WindowsAndMessaging::*;
 
 /// Custom message to quit the overlay thread.
 const WM_QUIT_OVERLAY: u32 = WM_USER + 102;
@@ -42,17 +35,20 @@ const OVERLAY_COLOR: u32 = 0x00FF8040; // RGB: 0x4080FF (reversed for Windows)
 
 /// Global state for the overlay window.
 static OVERLAY_STATE: std::sync::Mutex<OverlayState> = std::sync::Mutex::new(OverlayState {
-    rect: None,
+    rects: Vec::new(),
     color: OVERLAY_COLOR,
+    alpha: 128,
 });
 static OVERLAY_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 /// Current overlay display state.
 struct OverlayState {
-    /// Rectangle to display (None = hidden).
-    rect: Option<Rect>,
+    /// Rectangles to display (empty = hidden).
+    rects: Vec<Rect>,
     /// Color for the overlay.
     color: u32,
+    /// Per-pixel alpha used when rendering the rectangles.
+    alpha: u8,
 }
 
 /// A transparent overlay window for displaying visual snap hints.
@@ -241,26 +237,24 @@ impl OverlayWindow {
     /// This method is safe to call from any thread. It updates the global
     /// overlay state and sends a message to the overlay thread to repaint.
     pub fn show_snap_target(&self, rect: Rect) {
-        if let Ok(mut state) = OVERLAY_STATE.lock() {
-            state.rect = Some(rect);
-        }
+        self.show_snap_targets(&[rect]);
+    }
 
-        unsafe {
-            let _ = SetWindowPos(
-                self.hwnd,
-                Some(HWND_TOPMOST),
-                rect.x,
-                rect.y,
-                rect.width,
-                rect.height,
-                SWP_NOACTIVATE | SWP_SHOWWINDOW,
-            );
-
-            // SW_SHOWNA shows the window without activating it.
-            let _ = ShowWindow(self.hwnd, SW_SHOWNA);
-
-            let _ = InvalidateRect(Some(self.hwnd), None, true);
-        }
+    /// Show snap target highlights for multiple rectangles.
+    ///
+    /// Displays semi-transparent overlays at the given screen coordinates.
+    /// Useful for live resize previews where the focused column and its
+    /// shifted neighbors move together.
+    pub fn show_snap_targets(&self, rects: &[Rect]) {
+        let (color, alpha) = {
+            if let Ok(mut state) = OVERLAY_STATE.lock() {
+                state.rects = rects.to_vec();
+                (state.color, state.alpha)
+            } else {
+                (OVERLAY_COLOR, 128)
+            }
+        };
+        unsafe { push_overlay_rects(self.hwnd, rects, color, alpha) }
     }
 
     /// Get the raw HWND value for direct cross-thread access.
@@ -297,7 +291,7 @@ impl OverlayWindow {
     /// This method is safe to call from any thread.
     pub fn hide(&self) {
         if let Ok(mut state) = OVERLAY_STATE.lock() {
-            state.rect = None;
+            state.rects.clear();
         }
 
         unsafe {
@@ -307,15 +301,22 @@ impl OverlayWindow {
 
     /// Update the overlay opacity (0–255).
     pub fn set_opacity(&self, alpha: u8) {
-        unsafe {
-            use windows::Win32::UI::WindowsAndMessaging::{SetLayeredWindowAttributes, LWA_ALPHA};
-            let _ = SetLayeredWindowAttributes(self.hwnd, Default::default(), alpha, LWA_ALPHA);
+        let (rects, color) = {
+            if let Ok(mut state) = OVERLAY_STATE.lock() {
+                state.alpha = alpha;
+                (state.rects.clone(), state.color)
+            } else {
+                return;
+            }
+        };
+        if !rects.is_empty() {
+            unsafe { push_overlay_rects(self.hwnd, &rects, color, alpha) }
         }
     }
 
     /// Check if the overlay is currently visible.
     ///
-    /// Returns `true` if the overlay is showing a rectangle, `false` if hidden.
+    /// Returns `true` if the overlay is showing any rectangle, `false` if hidden.
     ///
     /// # Thread Safety
     ///
@@ -323,32 +324,24 @@ impl OverlayWindow {
     /// mutex-protected global state.
     pub fn is_visible(&self) -> bool {
         if let Ok(state) = OVERLAY_STATE.lock() {
-            state.rect.is_some()
+            !state.rects.is_empty()
         } else {
             false
         }
     }
 
-    /// Update the overlay color and trigger a repaint.
-    ///
-    /// Changes the fill color of the overlay rectangle. The color is
-    /// specified in Windows BGR format (0x00BBGGRR).
-    ///
-    /// # Parameters
-    ///
-    /// * `color` - The new color in BGR format (e.g., 0x00FF8040 for blue-ish)
-    ///
-    /// # Note
-    ///
-    /// The color change takes effect immediately if the overlay is visible.
-    /// A repaint is triggered to apply the new color.
+    /// Update the overlay color and rerender the visible rectangles.
     pub fn set_color(&self, color: u32) {
-        if let Ok(mut state) = OVERLAY_STATE.lock() {
-            state.color = color;
-        }
-
-        unsafe {
-            let _ = InvalidateRect(Some(self.hwnd), None, true);
+        let (rects, alpha) = {
+            if let Ok(mut state) = OVERLAY_STATE.lock() {
+                state.color = color;
+                (state.rects.clone(), state.alpha)
+            } else {
+                return;
+            }
+        };
+        if !rects.is_empty() {
+            unsafe { push_overlay_rects(self.hwnd, &rects, color, alpha) }
         }
     }
 }
@@ -394,58 +387,130 @@ unsafe extern "system" fn overlay_window_proc(
 fn overlay_window_proc_inner(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     let _ = wparam;
     let _ = lparam;
-    match msg {
-        WM_PAINT => {
-            let mut ps = PAINTSTRUCT::default();
-            let hdc = unsafe { BeginPaint(hwnd, &mut ps) };
+    unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
+}
 
-            let color = if let Ok(state) = OVERLAY_STATE.lock() {
-                state.color
-            } else {
-                OVERLAY_COLOR
-            };
-
-            let brush = unsafe { CreateSolidBrush(windows::Win32::Foundation::COLORREF(color)) };
-            let _ = unsafe { FillRect(hdc, &ps.rcPaint, brush) };
-            let _ = unsafe { DeleteObject(brush.into()) };
-
-            let _ = unsafe { EndPaint(hwnd, &ps) };
-            LRESULT(0)
+/// Reposition the overlay window with multiple rectangles directly using a
+/// raw HWND. Lightweight path for animation threads that bypass the event
+/// loop for low-latency, vsync-aligned updates.
+///
+/// # Safety
+///
+/// `hwnd_raw` must be a valid overlay window HWND obtained from [`OverlayWindow::hwnd_raw`].
+pub fn reposition_overlay_rects(hwnd_raw: isize, rects: &[Rect]) {
+    let hwnd = HWND(hwnd_raw as *mut c_void);
+    let (color, alpha) = {
+        if let Ok(mut state) = OVERLAY_STATE.lock() {
+            state.rects = rects.to_vec();
+            (state.color, state.alpha)
+        } else {
+            (OVERLAY_COLOR, 128)
         }
-        _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
-    }
+    };
+    unsafe { push_overlay_rects(hwnd, rects, color, alpha) }
 }
 
 /// Reposition the overlay window directly using a raw HWND.
 ///
 /// This is a lightweight alternative to [`OverlayWindow::show_snap_target`] designed
 /// for use from animation threads that need to bypass the event loop for low-latency,
-/// vsync-aligned updates. Calls `SetWindowPos` + `InvalidateRect` directly.
+/// vsync-aligned updates.
 ///
 /// # Safety
 ///
 /// `hwnd_raw` must be a valid overlay window HWND obtained from [`OverlayWindow::hwnd_raw`].
 pub fn reposition_overlay(hwnd_raw: isize, rect: Rect) {
-    let hwnd = HWND(hwnd_raw as *mut c_void);
+    reposition_overlay_rects(hwnd_raw, &[rect]);
+}
 
-    // Update global state so WM_PAINT draws correctly.
-    if let Ok(mut state) = OVERLAY_STATE.lock() {
-        state.rect = Some(rect);
+/// Render one or more semi-transparent rectangles into the overlay window
+/// using a per-pixel-alpha DIB and `UpdateLayeredWindow`.
+unsafe fn push_overlay_rects(hwnd: HWND, rects: &[Rect], color_bgr: u32, alpha: u8) {
+    if rects.is_empty() {
+        return;
     }
 
-    unsafe {
-        let _ = SetWindowPos(
-            hwnd,
-            Some(HWND_TOPMOST),
-            rect.x,
-            rect.y,
-            rect.width,
-            rect.height,
-            SWP_NOACTIVATE | SWP_SHOWWINDOW,
-        );
-        let _ = ShowWindow(hwnd, SW_SHOWNA);
-        let _ = InvalidateRect(Some(hwnd), None, true);
+    let min_x = rects.iter().map(|r| r.x).min().unwrap();
+    let min_y = rects.iter().map(|r| r.y).min().unwrap();
+    let max_x = rects.iter().map(|r| r.x + r.width).max().unwrap();
+    let max_y = rects.iter().map(|r| r.y + r.height).max().unwrap();
+    let w = max_x - min_x;
+    let h = max_y - min_y;
+    if w <= 0 || h <= 0 {
+        return;
     }
+
+    let bmi = BITMAPINFO {
+        bmiHeader: BITMAPINFOHEADER {
+            biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+            biWidth: w,
+            biHeight: -h,
+            biPlanes: 1,
+            biBitCount: 32,
+            biCompression: BI_RGB.0,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let mut bits: *mut c_void = std::ptr::null_mut();
+    let Ok(hbitmap) = CreateDIBSection(None, &bmi, DIB_RGB_COLORS, &mut bits, None, 0) else {
+        return;
+    };
+
+    let pixels = std::slice::from_raw_parts_mut(bits as *mut u32, (w * h) as usize);
+    let cb = (color_bgr >> 16) & 0xFF;
+    let cg = (color_bgr >> 8) & 0xFF;
+    let cr = color_bgr & 0xFF;
+    let a = alpha as u32;
+    let packed = (a << 24) | ((cb * a / 255) << 16) | ((cg * a / 255) << 8) | (cr * a / 255);
+
+    for r in rects {
+        let left = (r.x - min_x).max(0) as usize;
+        let top = (r.y - min_y).max(0) as usize;
+        let right = ((r.x + r.width - min_x).min(w)).max(0) as usize;
+        let bottom = ((r.y + r.height - min_y).min(h)).max(0) as usize;
+        if left >= right || top >= bottom {
+            continue;
+        }
+        for py in top..bottom {
+            for px in left..right {
+                pixels[py * w as usize + px] = packed;
+            }
+        }
+    }
+
+    let hdc_screen = GetDC(None);
+    let hdc_mem = CreateCompatibleDC(Some(hdc_screen));
+    let old = SelectObject(hdc_mem, hbitmap.into());
+
+    let pt_dst = POINT { x: min_x, y: min_y };
+    let size = SIZE { cx: w, cy: h };
+    let pt_src = POINT { x: 0, y: 0 };
+    let blend = BLENDFUNCTION {
+        BlendOp: AC_SRC_OVER as u8,
+        BlendFlags: 0,
+        SourceConstantAlpha: 255,
+        AlphaFormat: AC_SRC_ALPHA as u8,
+    };
+
+    let _ = UpdateLayeredWindow(
+        hwnd,
+        Some(hdc_screen),
+        Some(&pt_dst),
+        Some(&size),
+        Some(hdc_mem),
+        Some(&pt_src),
+        COLORREF(0),
+        Some(&blend),
+        ULW_ALPHA,
+    );
+
+    SelectObject(hdc_mem, old);
+    let _ = DeleteDC(hdc_mem);
+    ReleaseDC(None, hdc_screen);
+    let _ = DeleteObject(hbitmap.into());
+    let _ = ShowWindow(hwnd, SW_SHOWNA);
 }
 
 /// Snap hint types for different operations.
@@ -530,7 +595,8 @@ mod tests {
     fn test_overlay_state_default() {
         // Just verify the static initializes correctly
         if let Ok(state) = OVERLAY_STATE.lock() {
-            assert!(state.rect.is_none());
+            assert!(state.rects.is_empty());
+            assert_eq!(state.alpha, 128);
             assert_eq!(state.color, OVERLAY_COLOR);
         }
     }

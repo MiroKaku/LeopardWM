@@ -136,7 +136,8 @@ opacity = 128
 [animation]
 # Animation timing. Durations in milliseconds; 0 = snap instantly.
 # easing accepts "linear" | "ease_in" | "ease_out" | "ease_in_out".
-layout_duration_ms = 150            # column move / resize / tab changes
+layout_duration_ms = 150            # column move / tab changes
+resize_duration_ms = 100            # window resize landing animation
 workspace_switch_duration_ms = 200  # switching workspaces
 scroll_duration_ms = 200            # scrolling a column into view
 overview_duration_ms = 150          # overview open/close zoom

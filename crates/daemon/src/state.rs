@@ -105,6 +105,8 @@ pub(crate) struct MoveOrigin {
 pub(crate) enum DragHintAction {
     /// Show a semi-transparent ghost rectangle at the target column position.
     ShowGhost { rect: Rect },
+    /// Show ghosts for multiple target rectangles (resize preview).
+    ShowGhosts { rects: Vec<Rect> },
     /// Hide the drag hint overlay.
     Hide,
 }
@@ -189,8 +191,8 @@ pub(crate) struct ApplicationFullscreenState {
 
 /// Request for the main loop to spawn a resize preview animation thread.
 pub(crate) struct ResizeAnimationRequest {
-    pub(crate) start_rect: Rect,
-    pub(crate) target_rect: Rect,
+    pub(crate) start_rects: Vec<Rect>,
+    pub(crate) target_rects: Vec<Rect>,
 }
 
 /// Duration of resize preview transition animation in milliseconds.
@@ -457,8 +459,12 @@ pub(crate) struct AppState {
     pub(crate) last_resize_hint_update: Option<std::time::Instant>,
     /// Current snap target rect during resize (for change detection).
     pub(crate) resize_preview_target: Option<Rect>,
+    /// All target rects during resize preview (focused column + shifted neighbors).
+    pub(crate) resize_preview_target_rects: Vec<Rect>,
     /// Current displayed rect for overlay/border during resize preview.
     pub(crate) resize_preview_display_rect: Option<Rect>,
+    /// All currently displayed preview rects during resize.
+    pub(crate) resize_preview_display_rects: Vec<Rect>,
     /// Pending animation request (consumed by main loop to spawn DwmFlush thread).
     pub(crate) pending_resize_animation: Option<ResizeAnimationRequest>,
     /// Cancel flag for running resize preview animation thread.
@@ -843,7 +849,9 @@ impl AppState {
             resize_hwnd: None,
             last_resize_hint_update: None,
             resize_preview_target: None,
+            resize_preview_target_rects: Vec::new(),
             resize_preview_display_rect: None,
+            resize_preview_display_rects: Vec::new(),
             pending_resize_animation: None,
             resize_preview_cancel: Arc::new(AtomicBool::new(false)),
             resize_animation_active: Arc::new(AtomicBool::new(false)),

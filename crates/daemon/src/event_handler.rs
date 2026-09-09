@@ -1966,7 +1966,9 @@ impl AppState {
         self.resize_preview_cancel
             .store(true, std::sync::atomic::Ordering::Relaxed);
         self.resize_preview_target = None;
+        self.resize_preview_target_rects.clear();
         self.resize_preview_display_rect = None;
+        self.resize_preview_display_rects.clear();
         self.pending_resize_animation = None;
         self.last_resize_hint_update = None;
     }
@@ -2692,20 +2694,20 @@ impl AppState {
         let width_presets = self.config.layout.width_presets.clone();
         let height_presets = self.config.layout.height_presets.clone();
 
-        let snap_rect = self
+        let preview_rects = self
             .workspaces
             .get_mut(&monitor_id)
             .and_then(|v| v.get_mut(ws_idx))
             .and_then(|ws| {
                 if free_resize {
-                    ws.preview_resize_exact(
+                    ws.preview_resize_exact_rects(
                         hwnd,
                         visible_rect.width,
                         visible_rect.height,
                         work_area,
                     )
                 } else {
-                    ws.preview_resize_snap(
+                    ws.preview_resize_snap_rects(
                         hwnd,
                         visible_rect.width,
                         visible_rect.height,
@@ -2715,36 +2717,68 @@ impl AppState {
                     )
                 }
             });
-
-        let Some(target_rect) = snap_rect else {
+        let Some(preview_rects) = preview_rects else {
             return;
         };
 
-        if self.resize_preview_target == Some(target_rect) {
+        let Some((_, target_rect)) = preview_rects.iter().find(|(id, _)| *id == hwnd).copied()
+        else {
+            return;
+        };
+
+        // Show ghosts only for windows whose target differs from the current
+        // placement; untouched left-side columns stay unhighlighted.
+        let target_rects: Vec<Rect> = preview_rects
+            .into_iter()
+            .filter_map(|(id, rect)| {
+                if self.last_placed_layout_rects.get(&id).copied() == Some(rect) {
+                    None
+                } else {
+                    Some(rect)
+                }
+            })
+            .collect();
+        if target_rects.is_empty() {
+            return;
+        }
+
+        if self.resize_preview_target_rects == target_rects {
             // Target unchanged — if animation thread is driving the overlay, let it.
             if !self
                 .resize_animation_active
                 .load(std::sync::atomic::Ordering::Relaxed)
             {
-                self.pending_drag_hint =
-                    Some(crate::state::DragHintAction::ShowGhost { rect: target_rect });
+                self.pending_drag_hint = Some(crate::state::DragHintAction::ShowGhosts {
+                    rects: target_rects.clone(),
+                });
             }
             self.resize_preview_display_rect = Some(target_rect);
+            self.resize_preview_display_rects = target_rects;
             self.show_border(hwnd);
             return;
         }
 
-        // Snap target changed — request a vsync-aligned animation.
+        // Snap target changed — request a vsync-aligned animation for every
+        // affected rectangle.
+        let start_rects = if self.resize_preview_display_rects.is_empty() {
+            target_rects.clone()
+        } else {
+            std::mem::take(&mut self.resize_preview_display_rects)
+        };
         let start_rect = self.resize_preview_display_rect.unwrap_or(target_rect);
         self.resize_preview_target = Some(target_rect);
+        self.resize_preview_target_rects = target_rects.clone();
         self.resize_preview_display_rect = Some(start_rect);
+        self.resize_preview_display_rects = start_rects.clone();
         self.pending_resize_animation = Some(crate::state::ResizeAnimationRequest {
-            start_rect,
-            target_rect,
+            start_rects,
+            target_rects,
         });
 
-        // Show overlay at current position immediately (animation will take over).
-        self.pending_drag_hint = Some(crate::state::DragHintAction::ShowGhost { rect: start_rect });
+        // Show overlay at current positions immediately (animation will take over).
+        self.pending_drag_hint = Some(crate::state::DragHintAction::ShowGhosts {
+            rects: self.resize_preview_display_rects.clone(),
+        });
         self.show_border(hwnd);
     }
 
@@ -2874,9 +2908,12 @@ impl AppState {
         // user-resized size instead of the column's preset width.
         self.last_placed_layout_rects.remove(&hwnd);
         // Animate every affected window from the released geometry into the
-        // final snapped/neighbor-adjusted layout; without this the neighbor
-        // columns snap instantly on drop.
-        let _ = self.start_layout_transition(start_rects);
+        // final niri-style layout; resize uses a dedicated shorter duration
+        // so column moves can keep their heavier timing.
+        let _ = self.start_layout_transition_with_duration(
+            start_rects,
+            self.config.animation.resize_duration_ms,
+        );
         if let Err(e) = self.apply_layout() {
             warn!("Failed to apply layout after resize snap: {}", e);
         }

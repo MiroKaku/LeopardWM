@@ -672,7 +672,35 @@ impl Workspace {
         height_presets: &[f64],
         viewport: Rect,
     ) -> Option<Rect> {
-        self.preview_resize_impl(
+        self.preview_resize_snap_rects(
+            window_id,
+            current_width,
+            current_height,
+            width_presets,
+            height_presets,
+            viewport,
+        )
+        .and_then(|rects| {
+            rects
+                .into_iter()
+                .find(|(id, _)| *id == window_id)
+                .map(|(_, rect)| rect)
+        })
+    }
+
+    /// Compute every tiled window's placement after snapping the focused
+    /// column to the nearest width/height presets. Used for live resize
+    /// preview of the focused column and its shifted neighbors.
+    pub fn preview_resize_snap_rects(
+        &mut self,
+        window_id: WindowId,
+        current_width: i32,
+        current_height: i32,
+        width_presets: &[f64],
+        height_presets: &[f64],
+        viewport: Rect,
+    ) -> Option<Vec<(WindowId, Rect)>> {
+        self.preview_resize_all(
             window_id,
             current_width,
             current_height,
@@ -696,7 +724,25 @@ impl Workspace {
         current_height: i32,
         viewport: Rect,
     ) -> Option<Rect> {
-        self.preview_resize_impl(
+        self.preview_resize_exact_rects(window_id, current_width, current_height, viewport)
+            .and_then(|rects| {
+                rects
+                    .into_iter()
+                    .find(|(id, _)| *id == window_id)
+                    .map(|(_, rect)| rect)
+            })
+    }
+
+    /// Compute every tiled window's placement for an exact-width/height
+    /// resize preview (free mode).
+    pub fn preview_resize_exact_rects(
+        &mut self,
+        window_id: WindowId,
+        current_width: i32,
+        current_height: i32,
+        viewport: Rect,
+    ) -> Option<Vec<(WindowId, Rect)>> {
+        self.preview_resize_all(
             window_id,
             current_width,
             current_height,
@@ -709,14 +755,14 @@ impl Workspace {
         )
     }
 
-    fn preview_resize_impl(
+    fn preview_resize_all(
         &mut self,
         window_id: WindowId,
         current_width: i32,
         current_height: i32,
         spec: ResizePreviewSpec<'_>,
         viewport: Rect,
-    ) -> Option<Rect> {
+    ) -> Option<Vec<(WindowId, Rect)>> {
         let (col_idx, win_idx) = self.find_window_location(window_id)?;
 
         // Compute target values (read-only).
@@ -750,16 +796,17 @@ impl Workspace {
 
         // Compute placements with target values.
         let placements = self.compute_placements(viewport);
-        let rect = placements
-            .iter()
-            .find(|p| p.window_id == window_id)
-            .map(|p| p.rect);
+        let rects = placements
+            .into_iter()
+            .filter(|p| p.column_index != usize::MAX)
+            .map(|p| (p.window_id, p.rect))
+            .collect();
 
         // Restore originals.
         self.columns[col_idx].width = original_width;
         self.columns[col_idx].height_weights = original_weights;
 
-        rect
+        Some(rects)
     }
 
     /// Compute the exact height weight for a free-mode resize preview.

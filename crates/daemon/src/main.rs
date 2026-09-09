@@ -661,11 +661,11 @@ async fn stop_animation_worker_and_run_recovery(
 }
 
 /// Lightweight DwmFlush-aligned animation loop for resize preview transitions.
-/// Directly repositions the overlay window via SetWindowPos — no channel round-trip.
+/// Directly updates the overlay window — no channel round-trip.
 fn resize_preview_animation_loop(
     overlay_hwnd: isize,
-    start: leopardwm_core_layout::Rect,
-    target: leopardwm_core_layout::Rect,
+    start_rects: Vec<leopardwm_core_layout::Rect>,
+    target_rects: Vec<leopardwm_core_layout::Rect>,
     cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
     active: std::sync::Arc<std::sync::atomic::AtomicBool>,
 ) {
@@ -676,6 +676,8 @@ fn resize_preview_animation_loop(
     let start_time = std::time::Instant::now();
     let duration_ms = crate::state::RESIZE_PREVIEW_DURATION_MS;
 
+    let rect_count = start_rects.len().min(target_rects.len());
+
     loop {
         if cancel.load(Ordering::Relaxed) {
             break;
@@ -685,14 +687,20 @@ fn resize_preview_animation_loop(
         let t = (elapsed as f64 / duration_ms as f64).clamp(0.0, 1.0);
         // Cubic ease-out
         let t = 1.0 - (1.0 - t).powi(3);
-        let rect = leopardwm_core_layout::Rect::new(
-            crate::state::lerp_i32(start.x, target.x, t),
-            crate::state::lerp_i32(start.y, target.y, t),
-            crate::state::lerp_i32(start.width, target.width, t),
-            crate::state::lerp_i32(start.height, target.height, t),
-        );
-        // Direct SetWindowPos — zero indirection, zero channel latency.
-        leopardwm_platform_win32::overlay::reposition_overlay(overlay_hwnd, rect);
+        let rects: Vec<_> = (0..rect_count)
+            .map(|i| {
+                let start = start_rects[i];
+                let target = target_rects[i];
+                leopardwm_core_layout::Rect::new(
+                    crate::state::lerp_i32(start.x, target.x, t),
+                    crate::state::lerp_i32(start.y, target.y, t),
+                    crate::state::lerp_i32(start.width, target.width, t),
+                    crate::state::lerp_i32(start.height, target.height, t),
+                )
+            })
+            .collect();
+        // Direct update — zero indirection, zero channel latency.
+        leopardwm_platform_win32::overlay::reposition_overlay_rects(overlay_hwnd, &rects);
         if done {
             break;
         }
@@ -1746,6 +1754,18 @@ async fn process_window_event(ctx: &mut EventLoopCtx<'_>, win_event: WindowEvent
                                 rect.height,
                             ));
                         }
+                        crate::state::DragHintAction::ShowGhosts { rects } => {
+                            overlay.show_snap_targets(
+                                &rects
+                                    .iter()
+                                    .map(|r| {
+                                        leopardwm_core_layout::Rect::new(
+                                            r.x, r.y, r.width, r.height,
+                                        )
+                                    })
+                                    .collect::<Vec<_>>(),
+                            );
+                        }
                         crate::state::DragHintAction::Hide => {
                             overlay.hide();
                         }
@@ -1783,8 +1803,8 @@ async fn process_window_event(ctx: &mut EventLoopCtx<'_>, win_event: WindowEvent
                     std::thread::spawn(move || {
                         resize_preview_animation_loop(
                             overlay_hwnd,
-                            req.start_rect,
-                            req.target_rect,
+                            req.start_rects,
+                            req.target_rects,
                             cancel,
                             active,
                         );
