@@ -2482,6 +2482,34 @@ mod tests {
     }
 
     #[test]
+    fn test_adjust_neighbor_width_for_resize_left_edge() {
+        let mut ws = Workspace::new();
+        ws.insert_window(1, Some(400)).unwrap();
+        ws.insert_window(2, Some(500)).unwrap();
+
+        let old_right = ws.columns()[1].width();
+        ws.set_column_width_pixels(1, 700);
+        ws.adjust_neighbor_width_for_resize(1, old_right, true);
+
+        assert_eq!(ws.columns()[0].width(), 200);
+        assert_eq!(ws.columns()[1].width(), 700);
+    }
+
+    #[test]
+    fn test_adjust_neighbor_width_for_resize_right_edge() {
+        let mut ws = Workspace::new();
+        ws.insert_window(1, Some(400)).unwrap();
+        ws.insert_window(2, Some(500)).unwrap();
+
+        let old_left = ws.columns()[0].width();
+        ws.set_column_width_pixels(0, 600);
+        ws.adjust_neighbor_width_for_resize(0, old_left, false);
+
+        assert_eq!(ws.columns()[0].width(), 600);
+        assert_eq!(ws.columns()[1].width(), 300);
+    }
+
+    #[test]
     fn test_equalize_widths() {
         let mut ws = Workspace::with_gaps(10, 10);
         ws.insert_window(1, Some(300)).unwrap();

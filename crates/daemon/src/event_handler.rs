@@ -78,6 +78,21 @@ pub(crate) fn event_time_is_no_later_than(event_time_ms: u32, armed_time_ms: u32
     armed_time_ms.wrapping_sub(event_time_ms) < 0x8000_0000
 }
 
+/// Determine which horizontal border started a resize by comparing the cursor
+/// with the window's visible rect center. Top/bottom border drags may produce
+/// either side depending on cursor x; width delta is zero there, so the side is
+/// harmless.
+fn detect_resize_edge(hwnd: u64) -> Option<crate::state::ResizeEdge> {
+    let (cx, _) = leopardwm_platform_win32::get_cursor_pos()?;
+    let rect = leopardwm_platform_win32::get_window_visible_rect(hwnd)?;
+    let mid = rect.x.saturating_add(rect.width / 2);
+    Some(if cx < mid {
+        crate::state::ResizeEdge::Left
+    } else {
+        crate::state::ResizeEdge::Right
+    })
+}
+
 pub(crate) fn detect_application_fullscreen<'a>(
     monitors: impl IntoIterator<Item = &'a MonitorInfo>,
     chrome_rect: Option<Rect>,
@@ -1969,6 +1984,7 @@ impl AppState {
         self.resize_preview_display_rect = None;
         self.pending_resize_animation = None;
         self.last_resize_hint_update = None;
+        self.resize_edge = None;
     }
 
     fn cancel_matching_unfinished_drag(
@@ -2007,6 +2023,7 @@ impl AppState {
         if leopardwm_platform_win32::is_cursor_on_resize_border(hwnd) {
             debug!("Detected resize (not move) for window {}, tracking", hwnd);
             self.resize_hwnd = Some(hwnd);
+            self.resize_edge = detect_resize_edge(hwnd);
             return;
         }
 
@@ -2754,6 +2771,7 @@ impl AppState {
         #[cfg(test)]
         self.resize_complete_count
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let resize_edge = self.resize_edge;
         self.teardown_resize_preview_ui();
         let Some((monitor_id, ws_idx)) = self.find_window_workspace(hwnd) else {
             let _ = self.apply_layout();
@@ -2797,6 +2815,8 @@ impl AppState {
             .and_then(|v| v.get_mut(ws_idx))
         {
             if let Some((col_idx, win_idx)) = ws.find_window_location(hwnd) {
+                let old_focused_width = ws.columns().get(col_idx).map(|c| c.width()).unwrap_or(0);
+
                 if free_resize {
                     ws.set_column_width_pixels(col_idx, visible_rect.width);
 
@@ -2851,6 +2871,14 @@ impl AppState {
                         "Resize snap: window {} → width preset, new column width = {}",
                         hwnd,
                         ws.columns().get(col_idx).map(|c| c.width()).unwrap_or(0)
+                    );
+                }
+
+                if let Some(edge) = resize_edge {
+                    ws.adjust_neighbor_width_for_resize(
+                        col_idx,
+                        old_focused_width,
+                        edge == crate::state::ResizeEdge::Left,
                     );
                 }
             }
