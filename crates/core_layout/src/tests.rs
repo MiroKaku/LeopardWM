@@ -298,6 +298,29 @@ mod tests {
     }
 
     #[test]
+    fn test_middle_left_edge_resize_compensates_left_neighbor() {
+        let mut ws = Workspace::with_gaps(10, 10);
+        ws.insert_window(1, Some(400)).unwrap(); // x: 10-410
+        ws.insert_window(2, Some(400)).unwrap(); // x: 420-820
+        ws.insert_window(3, Some(400)).unwrap(); // x: 830-1230
+
+        let viewport = Rect::new(0, 0, 1920, 600);
+        let old_placements = ws.compute_placements(viewport);
+
+        // Dragging the middle column's left border left: the column widens,
+        // the left neighbor shrinks by the same delta, and the middle
+        // column's right edge stays fixed.
+        ws.set_column_width_pixels(1, 500);
+        ws.adjust_neighbor_width_for_resize(1, 400, true);
+
+        let placements = ws.compute_placements(viewport);
+        assert_eq!(placements[0].rect.width, 300);
+        assert_eq!(placements[1].rect.width, 500);
+        assert_eq!(placements[1].rect.right(), old_placements[1].rect.right());
+        assert_eq!(placements[2].rect.x, old_placements[2].rect.x);
+    }
+
+    #[test]
     fn test_ensure_focused_visible_center() {
         let mut ws = Workspace::with_gaps(10, 10);
         ws.set_centering_mode(CenteringMode::Center);

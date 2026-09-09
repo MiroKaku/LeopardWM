@@ -3406,6 +3406,26 @@ fn test_departing_focus_recovery_does_not_steal_valid_foreground() {
 }
 
 #[test]
+fn test_stale_focused_event_does_not_yank_focus_back() {
+    let mut state = two_managed_windows();
+    state.previous_focused_hwnd = Some(200);
+    state.last_focused_event_time = Some(100);
+
+    // Older event for the previously-focused window arrives late; the daemon
+    // must ignore it instead of flipping the border/focus back to 100.
+    state.handle_window_event(WindowEvent::Focused(100, 90));
+
+    assert_eq!(state.previous_focused_hwnd, Some(200));
+    assert_eq!(state.last_focused_event_time, Some(100));
+
+    // A newer event is still accepted.
+    state.handle_window_event(WindowEvent::Focused(100, 120));
+
+    assert_eq!(state.previous_focused_hwnd, Some(100));
+    assert_eq!(state.last_focused_event_time, Some(120));
+}
+
+#[test]
 fn test_managed_replacement_adopts_logical_focus_and_same_hwnd_focus_is_noop() {
     let mut state = two_managed_windows();
     state

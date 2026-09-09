@@ -1483,6 +1483,22 @@ impl AppState {
     }
 
     fn on_window_focused(&mut self, hwnd: u64, event_time_ms: u32) {
+        // Drop stale foreground events. Windows delivers these from a single
+        // hook queue in order, but `sync_foreground_window` can proactively
+        // move `previous_focused_hwnd` to a newer target; a delayed event for
+        // an older window would otherwise re-focus that older window and pin
+        // the border back to it.
+        if let Some(last) = self.last_focused_event_time {
+            if event_time_ms != last && event_time_is_no_later_than(event_time_ms, last) {
+                debug!(
+                    "Ignoring stale Focused event for {} (event_time {} before {})",
+                    hwnd, event_time_ms, last
+                );
+                return;
+            }
+        }
+        self.last_focused_event_time = Some(event_time_ms);
+
         // Skip if this window is already our tracked focus — avoids
         // feedback loops where sync_foreground_window triggers another
         // EVENT_SYSTEM_FOREGROUND for the same window.
@@ -2723,6 +2739,7 @@ impl AppState {
             .get_mut(&monitor_id)
             .and_then(|v| v.get_mut(ws_idx))
         {
+            let old_focused_width = ws.column(col_idx).map_or(0, |c| c.width());
             if free_resize {
                 ws.set_column_width_pixels(col_idx, visible_rect.width);
             } else {
@@ -2734,23 +2751,29 @@ impl AppState {
                 );
             }
 
-            // Left-edge drag: the OS moves the window's left border while its
-            // right border stays fixed. Scroll the strip so the model's right
-            // edge lands on the actual right edge, keeping left-side neighbors
-            // in place instead of pushing them off-screen. The width committed
-            // above expands the column into the area left of the viewport;
-            // `set_scroll_offset` deliberately bypasses the usual content
-            // clamp so the column can overhang the left edge.
+            // Left-edge drag:
+            // - Non-leftmost column: the boundary is shared with the left
+            //   neighbor. Compensate that neighbor by the opposite delta so
+            //   both columns stay on-screen and the combined width is stable.
+            // - Leftmost column: the OS moves the window's left border while
+            //   its right border stays fixed. Scroll the strip so the model's
+            //   right edge lands on the actual right edge, keeping right-side
+            //   neighbors in place. `set_scroll_offset` deliberately bypasses
+            //   the content clamp so the column can overhang the left edge.
             if self.resize_edge == Some(ResizeEdge::Left) {
                 ws.cancel_animation();
-                let target_scroll = {
-                    let column = ws.column(col_idx);
-                    let col_x = ws.column_x(col_idx);
-                    let col_width = column.map_or(0, |c| c.width());
-                    let outer_left = ws.outer_gaps().0;
-                    (col_x + col_width + work_area.x + outer_left - visible_rect.right()) as f64
-                };
-                ws.set_scroll_offset(target_scroll);
+                if col_idx > 0 {
+                    ws.adjust_neighbor_width_for_resize(col_idx, old_focused_width, true);
+                } else {
+                    let target_scroll = {
+                        let column = ws.column(col_idx);
+                        let col_x = ws.column_x(col_idx);
+                        let col_width = column.map_or(0, |c| c.width());
+                        let outer_left = ws.outer_gaps().0;
+                        (col_x + col_width + work_area.x + outer_left - visible_rect.right()) as f64
+                    };
+                    ws.set_scroll_offset(target_scroll);
+                }
             }
         }
 
@@ -2862,6 +2885,7 @@ impl AppState {
             }
             rects
         };
+        let resize_edge = self.resize_edge;
         self.teardown_resize_preview_ui();
         let Some((monitor_id, ws_idx)) = self.find_window_workspace(hwnd) else {
             let _ = self.apply_layout();
@@ -2905,6 +2929,7 @@ impl AppState {
             .and_then(|v| v.get_mut(ws_idx))
         {
             if let Some((col_idx, win_idx)) = ws.find_window_location(hwnd) {
+                let old_focused_width = ws.column(col_idx).map_or(0, |c| c.width());
                 if free_resize {
                     ws.set_column_width_pixels(col_idx, visible_rect.width);
 
@@ -2960,6 +2985,10 @@ impl AppState {
                         hwnd,
                         ws.columns().get(col_idx).map(|c| c.width()).unwrap_or(0)
                     );
+                }
+
+                if resize_edge == Some(ResizeEdge::Left) && col_idx > 0 {
+                    ws.adjust_neighbor_width_for_resize(col_idx, old_focused_width, true);
                 }
 
                 ws.ensure_focused_visible_animated(viewport_width);

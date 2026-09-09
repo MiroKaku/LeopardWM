@@ -391,6 +391,10 @@ pub(crate) struct AppState {
     /// Timestamp of the last Focused event that changed `previous_focused_hwnd`.
     /// Used to debounce rapid same-column focus switches (e.g., from scroll events).
     pub(crate) last_focus_change_at: Option<std::time::Instant>,
+    /// Event time of the last processed `WindowEvent::Focused`. Used to drop
+    /// stale foreground events that arrive after a newer focus and would
+    /// otherwise yank the border/focus state back to an old window.
+    pub(crate) last_focused_event_time: Option<u32>,
     /// Last time stale-window pruning ran (throttled to 1/sec).
     pub(crate) last_prune_at: Option<std::time::Instant>,
     /// Border frame overlay for the active window.
@@ -822,6 +826,7 @@ impl AppState {
             pending_workspace_switch_focus: None,
             last_broadcast_focused: None,
             last_focus_change_at: None,
+            last_focused_event_time: None,
             last_prune_at: None,
             // Skipped under cfg(test): the layered DWM window would lag the mouse.
             border_frame: if cfg!(test) {
