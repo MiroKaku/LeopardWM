@@ -29,6 +29,10 @@ All notable changes to LeopardWM will be documented in this file.
 
 ### Fixes
 
+- **Border resize only acts on the focused window.** Grabbing a non-focused
+  window's border first focuses that window, so the daemon tracks and applies
+  the resize against its own column instead of a stale neighbor.
+
 - **Left-edge resize now follows niri-style boundary movement.** Dragging a
   column's left border shifts the columns left of that boundary instead of
   shrinking/growing the adjacent column; the live scroll offset is preserved

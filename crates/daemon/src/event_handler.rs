@@ -2028,6 +2028,35 @@ impl AppState {
         (true, removed_placeholder, removed_from_source, drag_source)
     }
 
+    /// Border resize only touches the focused window. If the user grabs a
+    /// non-focused window's border, first make it the workspace focus so the
+    /// resize handling and the post-release view logic target the right column.
+    pub(crate) fn focus_window_for_resize(&mut self, hwnd: u64) {
+        let Some((monitor_id, ws_idx)) = self.find_window_workspace(hwnd) else {
+            return;
+        };
+        let already = self
+            .workspaces
+            .get(&monitor_id)
+            .and_then(|v| v.get(ws_idx))
+            .is_some_and(|ws| ws.focused_window() == Some(hwnd))
+            || self.previous_focused_hwnd == Some(hwnd);
+        if already {
+            return;
+        }
+        self.focused_monitor = monitor_id;
+        if let Some(ws) = self
+            .workspaces
+            .get_mut(&monitor_id)
+            .and_then(|v| v.get_mut(ws_idx))
+        {
+            let _ = ws.focus_window(hwnd);
+        }
+        self.previous_focused_hwnd = Some(hwnd);
+        self.show_border(hwnd);
+        self.broadcast_focused_window_if_changed(monitor_id as i64, Some(hwnd));
+    }
+
     /// Handle the start of a user drag or resize.
     fn on_move_size_start(&mut self, hwnd: u64) {
         debug!("User started dragging/resizing window {}", hwnd);
@@ -2037,6 +2066,7 @@ impl AppState {
         // the drag-and-drop overlay.
         if leopardwm_platform_win32::is_cursor_on_resize_border(hwnd) {
             debug!("Detected resize (not move) for window {}, tracking", hwnd);
+            self.focus_window_for_resize(hwnd);
             self.resize_hwnd = Some(hwnd);
             self.resize_edge = leopardwm_platform_win32::get_cursor_pos()
                 .zip(leopardwm_platform_win32::get_window_visible_rect(hwnd))

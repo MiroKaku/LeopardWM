@@ -2590,6 +2590,22 @@ fn two_managed_windows() -> AppState {
 }
 
 #[test]
+fn test_resize_auto_focuses_non_focused_window() {
+    let mut state = two_managed_windows();
+    let focused = state.focused_workspace().unwrap().focused_window();
+    let target = if focused == Some(100) { 200 } else { 100 };
+    state.previous_focused_hwnd = Some(if target == 100 { 200 } else { 100 });
+
+    state.focus_window_for_resize(target);
+
+    assert_eq!(state.previous_focused_hwnd, Some(target));
+    assert_eq!(
+        state.focused_workspace().unwrap().focused_window(),
+        Some(target)
+    );
+}
+
+#[test]
 fn test_matching_resize_departure_cancels_preview_without_completing() {
     for event in [WindowEvent::Destroyed(100), WindowEvent::Hidden(100)] {
         let mut state = two_managed_windows();
