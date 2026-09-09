@@ -65,6 +65,10 @@ focus_new_windows = true
 # Track focus changes from Windows (sync with Alt-Tab, etc.)
 track_focus_changes = true
 
+# How border-drag resize is applied: "snap" (default, nearest preset) or
+# "free" (keep the exact dragged width and height).
+resize_mode = "snap"
+
 # Log level: trace, debug, info, warn, error
 log_level = "info"
 

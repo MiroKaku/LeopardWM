@@ -366,10 +366,25 @@ pub enum TabCloseAction {
     Untab,
 }
 
+/// How border-drag resize results are applied to a tiled column.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ResizeMode {
+    /// Snap the dragged width and height to the configured presets.
+    #[default]
+    Snap,
+    /// Keep the exact dragged width and height.
+    Free,
+}
+
 /// Behavior-related configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BehaviorConfig {
+    /// How border-drag resize results are applied.
+    #[serde(default)]
+    pub resize_mode: ResizeMode,
+
     /// Whether to focus new windows automatically.
     #[serde(default = "default_true")]
     pub focus_new_windows: bool,
@@ -463,6 +478,7 @@ pub enum NewWindowPlacement {
 impl Default for BehaviorConfig {
     fn default() -> Self {
         Self {
+            resize_mode: ResizeMode::default(),
             focus_new_windows: true,
             track_focus_changes: true,
             log_level: default_log_level(),
@@ -2030,6 +2046,22 @@ mod tests {
         let config = Config::default();
         assert!(!config.behavior.focus_follows_mouse);
         assert_eq!(config.behavior.focus_follows_mouse_delay_ms, 100);
+    }
+
+    #[test]
+    fn test_resize_mode_defaults_snap() {
+        let config = Config::default();
+        assert_eq!(config.behavior.resize_mode, ResizeMode::Snap);
+    }
+
+    #[test]
+    fn test_resize_mode_serialization_free() {
+        let toml_str = r#"
+            [behavior]
+            resize_mode = "free"
+        "#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.behavior.resize_mode, ResizeMode::Free);
     }
 
     #[test]

@@ -1128,6 +1128,16 @@ input[type="range"]::-webkit-slider-thumb {
             </div>
           </div>
           <div class="field">
+            <div class="field-info"><div class="field-label">Resize mode</div><div class="field-desc">Border-drag behavior: snap to width/height presets, or keep the exact dragged size</div></div>
+            <div class="combobox" id="cb-behavior-resize_mode">
+              <button class="combobox-trigger" type="button"><span class="combobox-text">Snap to presets</span><svg class="combobox-chevron" viewBox="0 0 12 12"><path d="M2.15 4.65a.5.5 0 01.7 0L6 7.79l3.15-3.14a.5.5 0 11.7.7l-3.5 3.5a.5.5 0 01-.7 0l-3.5-3.5a.5.5 0 010-.7z"/></svg></button>
+              <div class="combobox-popup">
+                <div class="combobox-option selected" data-value="snap">Snap to presets</div>
+                <div class="combobox-option" data-value="free">Free / exact</div>
+              </div>
+            </div>
+          </div>
+          <div class="field">
             <div class="field-info"><div class="field-label">Overview previews</div><div class="field-desc">Card contents in the workspace overview: live window previews, snapshots captured when windows leave the screen, or placeholder icons</div></div>
             <div class="combobox" id="cb-overview-render">
               <button class="combobox-trigger" type="button"><span class="combobox-text">Live previews</span><svg class="combobox-chevron" viewBox="0 0 12 12"><path d="M2.15 4.65a.5.5 0 01.7 0L6 7.79l3.15-3.14a.5.5 0 11.7.7l-3.5 3.5a.5.5 0 01-.7 0l-3.5-3.5a.5.5 0 010-.7z"/></svg></button>
@@ -1566,6 +1576,7 @@ function init(cfg) {
   setCb('cb-behavior-log_level', cfg.behavior.log_level);
   setCb('cb-behavior-tab_close_action', cfg.behavior.tab_close_action || 'close_window');
   setCb('cb-behavior-new_window_placement', cfg.behavior.new_window_placement || 'new_column');
+  setCb('cb-behavior-resize_mode', cfg.behavior.resize_mode || 'snap');
   setCb('cb-overview-render', (cfg.overview && cfg.overview.render) || 'live');
 
   if (cfg.hotkeys) {
@@ -2193,7 +2204,8 @@ function readConfig() {
       hide_offscreen_taskbar_buttons: checked('behavior-hide_offscreen_taskbar_buttons'),
       log_level: cbVal('cb-behavior-log_level'),
       tab_close_action: cbVal('cb-behavior-tab_close_action'),
-      new_window_placement: cbVal('cb-behavior-new_window_placement')
+      new_window_placement: cbVal('cb-behavior-new_window_placement'),
+      resize_mode: cbVal('cb-behavior-resize_mode')
     },
     hotkeys: Object.assign(readHotkeys(), {
       scroll_modifier: readScrollModifier(),
@@ -2365,6 +2377,14 @@ mod tests {
         ));
         assert!(SETTINGS_HTML
             .contains("reduce_motion_on_battery: checked('animation-reduce_motion_on_battery')"));
+    }
+
+    #[test]
+    fn resize_mode_is_wired_into_settings_config() {
+        assert!(SETTINGS_HTML.contains("id=\"cb-behavior-resize_mode\""));
+        assert!(SETTINGS_HTML
+            .contains("setCb('cb-behavior-resize_mode', cfg.behavior.resize_mode || 'snap');"));
+        assert!(SETTINGS_HTML.contains("resize_mode: cbVal('cb-behavior-resize_mode')"));
     }
 
     #[test]

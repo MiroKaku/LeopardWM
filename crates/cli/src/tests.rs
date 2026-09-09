@@ -375,6 +375,7 @@ fn test_generate_default_config_contains_behavior_section() {
     assert!(config.contains("focus_new_windows"));
     assert!(config.contains("track_focus_changes"));
     assert!(config.contains("log_level"));
+    assert!(config.contains("resize_mode"));
 }
 
 #[test]

@@ -2,6 +2,13 @@ use crate::*;
 
 use crate::workspace::Workspace;
 
+/// Target settings for a resize preview.
+struct ResizePreviewSpec<'a> {
+    width_presets: &'a [f64],
+    height_presets: &'a [f64],
+    snap: bool,
+}
+
 impl Workspace {
     // ========================================================================
     // Minimum Width Methods
@@ -450,6 +457,40 @@ impl Workspace {
         }
     }
 
+    /// Set a window's height weight from an exact pixel height.
+    ///
+    /// This is the free-mode counterpart to `snap_window_height_to_preset`: the
+    /// released height is converted to a weight and kept instead of snapping to
+    /// a height preset. Single-window and Tabbed columns are no-ops because
+    /// their height weights have no visible effect.
+    pub fn set_window_height_weight_pixels(
+        &mut self,
+        col_idx: usize,
+        win_idx: usize,
+        new_height: i32,
+        viewport_height: i32,
+    ) {
+        let Some(column) = self.columns.get(col_idx) else {
+            return;
+        };
+        if column.len() <= 1 || column.is_tabbed() {
+            return;
+        }
+        if win_idx >= column.len() {
+            return;
+        }
+
+        let outer_top = self.outer_gap_top.max(0);
+        let outer_bottom = self.outer_gap_bottom.max(0);
+        let gap = self.gap.max(0);
+        let window_gaps = gap.saturating_mul(column.len() as i32 - 1);
+        let available_height = (viewport_height - outer_top - outer_bottom - window_gaps).max(1);
+        let weight = new_height as f64 / available_height as f64;
+        if let Some(column) = self.columns.get_mut(col_idx) {
+            column.set_height_weight(win_idx, weight);
+        }
+    }
+
     // ========================================================================
     // Height Preset Cycling
     // ========================================================================
@@ -620,9 +661,8 @@ impl Workspace {
             .copied()
     }
 
-    /// Compute the placement rect a window would occupy after snapping its
-    /// column width and height to the nearest presets. Used for resize preview
-    /// ghost overlay. Temporarily mutates column state and restores it.
+    /// Compute the placement rect after snapping its column width and height
+    /// to the nearest presets. Used for resize preview ghost overlay.
     pub fn preview_resize_snap(
         &mut self,
         window_id: WindowId,
@@ -632,23 +672,75 @@ impl Workspace {
         height_presets: &[f64],
         viewport: Rect,
     ) -> Option<Rect> {
+        self.preview_resize_impl(
+            window_id,
+            current_width,
+            current_height,
+            ResizePreviewSpec {
+                width_presets,
+                height_presets,
+                snap: true,
+            },
+            viewport,
+        )
+    }
+
+    /// Compute the placement rect that keeps the exact dragged width and height.
+    ///
+    /// This is the free-mode preview used when `behavior.resize_mode` is `free`:
+    /// the ghost follows the user's pointer instead of the nearest preset.
+    pub fn preview_resize_exact(
+        &mut self,
+        window_id: WindowId,
+        current_width: i32,
+        current_height: i32,
+        viewport: Rect,
+    ) -> Option<Rect> {
+        self.preview_resize_impl(
+            window_id,
+            current_width,
+            current_height,
+            ResizePreviewSpec {
+                width_presets: &[],
+                height_presets: &[],
+                snap: false,
+            },
+            viewport,
+        )
+    }
+
+    fn preview_resize_impl(
+        &mut self,
+        window_id: WindowId,
+        current_width: i32,
+        current_height: i32,
+        spec: ResizePreviewSpec<'_>,
+        viewport: Rect,
+    ) -> Option<Rect> {
         let (col_idx, win_idx) = self.find_window_location(window_id)?;
 
-        // Compute snapped values (read-only)
-        let snapped_width =
-            self.nearest_preset_width(col_idx, current_width, width_presets, viewport.width);
-        let snapped_weight = self.nearest_preset_height_weight(
-            col_idx,
-            current_height,
-            height_presets,
-            viewport.height,
-        );
+        // Compute target values (read-only).
+        let snapped_width = if spec.snap {
+            self.nearest_preset_width(col_idx, current_width, spec.width_presets, viewport.width)
+        } else {
+            Some(current_width.max(MIN_COLUMN_WIDTH))
+        };
+        let snapped_weight = if spec.snap {
+            self.nearest_preset_height_weight(
+                col_idx,
+                current_height,
+                spec.height_presets,
+                viewport.height,
+            )
+        } else {
+            self.exact_height_weight(col_idx, win_idx, current_height, viewport.height)
+        };
 
-        // Save originals
+        // Save originals.
         let original_width = self.columns[col_idx].width;
         let original_weights = self.columns[col_idx].height_weights.clone();
 
-        // Temporarily apply snapped values
+        // Temporarily apply target values.
         if let Some(w) = snapped_width {
             self.columns[col_idx].set_width(w);
         }
@@ -656,17 +748,38 @@ impl Workspace {
             self.columns[col_idx].set_height_weight(win_idx, weight);
         }
 
-        // Compute placements with snapped values
+        // Compute placements with target values.
         let placements = self.compute_placements(viewport);
         let rect = placements
             .iter()
             .find(|p| p.window_id == window_id)
             .map(|p| p.rect);
 
-        // Restore originals
+        // Restore originals.
         self.columns[col_idx].width = original_width;
         self.columns[col_idx].height_weights = original_weights;
 
         rect
+    }
+
+    /// Compute the exact height weight for a free-mode resize preview.
+    fn exact_height_weight(
+        &self,
+        col_idx: usize,
+        win_idx: usize,
+        current_height: i32,
+        viewport_height: i32,
+    ) -> Option<f64> {
+        let column = self.columns.get(col_idx)?;
+        if column.len() <= 1 || column.is_tabbed() || win_idx >= column.len() {
+            return None;
+        }
+
+        let outer_top = self.outer_gap_top.max(0);
+        let outer_bottom = self.outer_gap_bottom.max(0);
+        let gap = self.gap.max(0);
+        let window_gaps = gap.saturating_mul(column.len() as i32 - 1);
+        let available_height = (viewport_height - outer_top - outer_bottom - window_gaps).max(1);
+        Some(current_height as f64 / available_height as f64)
     }
 }

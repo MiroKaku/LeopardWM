@@ -109,6 +109,23 @@ impl Workspace {
         }
     }
 
+    /// Set a column's width to an exact pixel value.
+    ///
+    /// This is used by free border-drag resize: the user's released width is
+    /// kept instead of snapping to a width preset. The width is clamped to the
+    /// layout minimum by `Column::set_width`. Cached min-size constraints are
+    /// cleared so the next apply cycle re-detects them from the new geometry.
+    pub fn set_column_width_pixels(&mut self, col_idx: usize, new_width: i32) {
+        self.maximized_column = None;
+        if let Some(column) = self.columns.get_mut(col_idx) {
+            column.set_width(new_width);
+            for wid in column.windows() {
+                self.window_min_widths.remove(wid);
+                self.window_min_heights.remove(wid);
+            }
+        }
+    }
+
     /// Move the focused column left (swap with the column to its left).
     pub fn move_column_left(&mut self) {
         if self.focused_column > 0 {

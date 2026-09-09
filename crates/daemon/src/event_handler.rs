@@ -2688,6 +2688,7 @@ impl AppState {
             Some(m) => m.work_area,
             None => return,
         };
+        let free_resize = self.config.behavior.resize_mode == config::ResizeMode::Free;
         let width_presets = self.config.layout.width_presets.clone();
         let height_presets = self.config.layout.height_presets.clone();
 
@@ -2696,14 +2697,23 @@ impl AppState {
             .get_mut(&monitor_id)
             .and_then(|v| v.get_mut(ws_idx))
             .and_then(|ws| {
-                ws.preview_resize_snap(
-                    hwnd,
-                    visible_rect.width,
-                    visible_rect.height,
-                    &width_presets,
-                    &height_presets,
-                    work_area,
-                )
+                if free_resize {
+                    ws.preview_resize_exact(
+                        hwnd,
+                        visible_rect.width,
+                        visible_rect.height,
+                        work_area,
+                    )
+                } else {
+                    ws.preview_resize_snap(
+                        hwnd,
+                        visible_rect.width,
+                        visible_rect.height,
+                        &width_presets,
+                        &height_presets,
+                        work_area,
+                    )
+                }
             });
 
         let Some(target_rect) = snap_rect else {
@@ -2770,13 +2780,14 @@ impl AppState {
             return;
         }
 
-        // Tiled: snap to width/height presets.
+        // Tiled: apply preset snap or keep the exact dragged size.
         let Some(visible_rect) = leopardwm_platform_win32::get_window_visible_rect(hwnd) else {
             let _ = self.apply_layout();
             return;
         };
 
         let viewport_width = self.viewport_width_for(monitor_id);
+        let free_resize = self.config.behavior.resize_mode == config::ResizeMode::Free;
         let width_presets = self.config.layout.width_presets.clone();
         let height_presets = self.config.layout.height_presets.clone();
 
@@ -2786,36 +2797,62 @@ impl AppState {
             .and_then(|v| v.get_mut(ws_idx))
         {
             if let Some((col_idx, win_idx)) = ws.find_window_location(hwnd) {
-                // Snap width to nearest preset
-                ws.snap_column_width_to_preset(
-                    col_idx,
-                    visible_rect.width,
-                    &width_presets,
-                    viewport_width,
-                );
+                if free_resize {
+                    ws.set_column_width_pixels(col_idx, visible_rect.width);
 
-                // Snap height to nearest preset (multi-window columns only)
-                let col_len = ws.columns().get(col_idx).map(|c| c.len()).unwrap_or(0);
-                if col_len > 1 {
-                    let viewport_height = self
-                        .monitors
-                        .get(&monitor_id)
-                        .map(|m| m.work_area.height)
-                        .unwrap_or(crate::state::FALLBACK_WORK_AREA_HEIGHT);
-                    ws.snap_window_height_to_preset(
+                    // Keep exact height for multi-window columns.
+                    let col_len = ws.columns().get(col_idx).map(|c| c.len()).unwrap_or(0);
+                    if col_len > 1 {
+                        let viewport_height = self
+                            .monitors
+                            .get(&monitor_id)
+                            .map(|m| m.work_area.height)
+                            .unwrap_or(crate::state::FALLBACK_WORK_AREA_HEIGHT);
+                        ws.set_window_height_weight_pixels(
+                            col_idx,
+                            win_idx,
+                            visible_rect.height,
+                            viewport_height,
+                        );
+                    }
+
+                    info!(
+                        "Resize free: window {} → exact width, new column width = {}",
+                        hwnd,
+                        ws.columns().get(col_idx).map(|c| c.width()).unwrap_or(0)
+                    );
+                } else {
+                    // Snap width to nearest preset
+                    ws.snap_column_width_to_preset(
                         col_idx,
-                        win_idx,
-                        visible_rect.height,
-                        &height_presets,
-                        viewport_height,
+                        visible_rect.width,
+                        &width_presets,
+                        viewport_width,
+                    );
+
+                    // Snap height to nearest preset (multi-window columns only)
+                    let col_len = ws.columns().get(col_idx).map(|c| c.len()).unwrap_or(0);
+                    if col_len > 1 {
+                        let viewport_height = self
+                            .monitors
+                            .get(&monitor_id)
+                            .map(|m| m.work_area.height)
+                            .unwrap_or(crate::state::FALLBACK_WORK_AREA_HEIGHT);
+                        ws.snap_window_height_to_preset(
+                            col_idx,
+                            win_idx,
+                            visible_rect.height,
+                            &height_presets,
+                            viewport_height,
+                        );
+                    }
+
+                    info!(
+                        "Resize snap: window {} → width preset, new column width = {}",
+                        hwnd,
+                        ws.columns().get(col_idx).map(|c| c.width()).unwrap_or(0)
                     );
                 }
-
-                info!(
-                    "Resize snap: window {} → width preset, new column width = {}",
-                    hwnd,
-                    ws.columns().get(col_idx).map(|c| c.width()).unwrap_or(0)
-                );
             }
         }
 

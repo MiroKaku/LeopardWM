@@ -2454,6 +2454,34 @@ mod tests {
     }
 
     #[test]
+    fn test_set_column_width_pixels() {
+        let mut ws = Workspace::new();
+        ws.insert_window(1, Some(400)).unwrap();
+
+        ws.set_column_width_pixels(0, 375);
+        assert_eq!(ws.columns()[0].width(), 375);
+
+        // Below the layout minimum clamps to 100px.
+        ws.set_column_width_pixels(0, 10);
+        assert_eq!(ws.columns()[0].width(), 100);
+    }
+
+    #[test]
+    fn test_preview_resize_exact_keeps_dragged_width() {
+        let mut ws = Workspace::with_gaps(10, 10);
+        ws.insert_window(1, Some(400)).unwrap();
+        let viewport = Rect::new(0, 0, 1920, 1080);
+
+        let rect = ws
+            .preview_resize_exact(1, 333, 600, viewport)
+            .expect("window should have a placement");
+
+        assert_eq!(rect.width, 333);
+        // Preview must not mutate the column.
+        assert_eq!(ws.columns()[0].width(), 400);
+    }
+
+    #[test]
     fn test_equalize_widths() {
         let mut ws = Workspace::with_gaps(10, 10);
         ws.insert_window(1, Some(300)).unwrap();
