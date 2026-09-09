@@ -375,6 +375,11 @@ pub(crate) struct AppState {
     pub(crate) pending_suppress_landing_focus_resync: bool,
     /// Previously focused window for border color tracking.
     pub(crate) previous_focused_hwnd: Option<u64>,
+    /// `(hwnd, at)`: the most recent user-driven Focused event that occurred
+    /// while the cursor was on a window border. MoveSizeStart consumes this
+    /// as a fallback resize signal when the cursor-position probe at start
+    /// time already shows the pointer left the border.
+    pub(crate) last_border_resize_gesture: Option<(u64, std::time::Instant)>,
     /// Suppresses delayed focus notifications for the exact window left by a
     /// successful workspace switch whose destination has no visible focus.
     pub(crate) pending_workspace_switch_focus: Option<PendingWorkspaceSwitchFocus>,
@@ -823,6 +828,7 @@ impl AppState {
             pending_sticky_refocus: None,
             pending_suppress_landing_focus_resync: false,
             previous_focused_hwnd: None,
+            last_border_resize_gesture: None,
             pending_workspace_switch_focus: None,
             last_broadcast_focused: None,
             last_focus_change_at: None,

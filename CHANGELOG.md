@@ -35,6 +35,12 @@ All notable changes to LeopardWM will be documented in this file.
   border drag no longer auto-scrolls, and release keeps the live scroll
   position instead of re-centering the layout.
 
+- **Border drags are no longer misclassified as column moves.** Focus-driven
+  border gestures are remembered briefly, and horizontal border detection
+  also checks DWM extended-frame bounds, so a false negative at
+  `MoveSizeStart` cannot feed the drag-and-drop reorder path and swap the
+  window with its neighbor.
+
 - **Left-edge resize now follows niri-style boundary movement.** Dragging a
   column's left border shifts the columns left of that boundary instead of
   shrinking/growing the adjacent column; the live scroll offset is preserved

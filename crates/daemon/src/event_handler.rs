@@ -1673,7 +1673,14 @@ impl AppState {
                         hwnd, monitor_id, user_initiated
                     );
                     if user_initiated {
-                        if leopardwm_platform_win32::is_cursor_on_resize_border(hwnd) {
+                        let on_resize_border =
+                            leopardwm_platform_win32::is_cursor_on_resize_border(hwnd)
+                                || leopardwm_platform_win32::is_cursor_on_horizontal_resize_border(
+                                    hwnd,
+                                );
+                        if on_resize_border {
+                            self.last_border_resize_gesture =
+                                Some((hwnd, std::time::Instant::now()));
                             debug!("Focus {} from border resize gesture; keeping scroll", hwnd);
                         } else {
                             workspace.ensure_focused_visible_animated(viewport_width);
@@ -2068,7 +2075,16 @@ impl AppState {
         // Distinguish resize (border drag) from move (title bar drag).
         // Only create drag state for moves — resizes should not trigger
         // the drag-and-drop overlay.
-        if leopardwm_platform_win32::is_cursor_on_resize_border(hwnd) {
+        let cursor_on_border = leopardwm_platform_win32::is_cursor_on_resize_border(hwnd)
+            || leopardwm_platform_win32::is_cursor_on_horizontal_resize_border(hwnd);
+        let recent_border_focus = self
+            .last_border_resize_gesture
+            .filter(|(candidate, at)| {
+                *candidate == hwnd && at.elapsed() <= std::time::Duration::from_millis(1500)
+            })
+            .is_some();
+        if cursor_on_border || recent_border_focus {
+            self.last_border_resize_gesture = None;
             debug!("Detected resize (not move) for window {}, tracking", hwnd);
             self.focus_window_for_resize(hwnd);
             self.resize_hwnd = Some(hwnd);
@@ -2083,6 +2099,7 @@ impl AppState {
                 });
             return;
         }
+        self.last_border_resize_gesture = None;
 
         let (is_tiled, source_monitor, source_ws_idx, source_window_slot, col_idx) =
             if let Some((monitor_id, ws_idx)) = self.find_window_workspace(hwnd) {

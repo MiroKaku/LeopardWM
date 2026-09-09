@@ -355,6 +355,29 @@ pub fn get_window_chrome_rect(hwnd: WindowId) -> Option<Rect> {
     }
 }
 
+/// Check if the cursor is on a window's horizontal resize border (left/right
+/// only). Falls back to DWM extended-frame bounds for apps whose `GetWindowRect`
+/// can lag behind the compositor.
+pub fn is_cursor_on_horizontal_resize_border(hwnd: WindowId) -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetSystemMetrics, SM_CXPADDEDBORDER, SM_CXSIZEFRAME,
+    };
+
+    let Some((cx, _)) = get_cursor_pos() else {
+        return false;
+    };
+    let border_x = unsafe {
+        GetSystemMetrics(SM_CXSIZEFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER)
+    }
+    .max(8);
+
+    let chrome = get_window_chrome_rect(hwnd);
+    let visible = get_window_visible_rect(hwnd);
+    [chrome, visible].into_iter().flatten().any(|rect| {
+        (cx - rect.x).abs() <= border_x || (cx - (rect.x + rect.width)).abs() <= border_x
+    })
+}
+
 /// Check if the cursor is on a window's resize border (not the title bar/interior).
 ///
 /// Returns `true` if the cursor position at `MoveSizeStart` time suggests a resize
