@@ -628,6 +628,10 @@ pub(crate) struct AppState {
     /// the MoveOffScreen sentinel). Real HWNDs can't be parked under test.
     #[cfg(test)]
     pub(crate) injected_offscreen_hwnds: HashSet<u64>,
+    /// Test-only override for windows the OS reports as maximized, so border
+    /// decisions can be asserted without a live HWND.
+    #[cfg(test)]
+    pub(crate) injected_maximized_hwnds: HashSet<u64>,
     #[cfg(test)]
     pub(crate) injected_foreground_hwnd: Option<Option<u64>>,
     /// Test-only override for how long ago the last user input happened. A real
@@ -920,6 +924,8 @@ impl AppState {
             injected_visible_hwnds: HashSet::new(),
             #[cfg(test)]
             injected_offscreen_hwnds: HashSet::new(),
+            #[cfg(test)]
+            injected_maximized_hwnds: HashSet::new(),
             #[cfg(test)]
             injected_foreground_hwnd: None,
             #[cfg(test)]

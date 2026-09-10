@@ -35,6 +35,22 @@ pub(crate) fn should_sync_foreground_on_animation_landing(
     !paused && !suppress_landing_focus_resync
 }
 
+/// Whether the focus frame can describe where the focused window is.
+///
+/// The frame is drawn at the window's layout slot, so it must stay hidden
+/// whenever the window is somewhere else: tiling is paused, the window is in
+/// application fullscreen, the app has it maximized (placement deliberately
+/// leaves a maximized tiled window at the maximized rect), or the workspace is
+/// in WM fullscreen.
+pub(crate) fn should_show_focus_frame(
+    paused: bool,
+    application_fullscreen: bool,
+    maximized: bool,
+    workspace_fullscreen: bool,
+) -> bool {
+    !(paused || application_fullscreen || maximized || workspace_fullscreen)
+}
+
 impl AppState {
     /// Convert the config border color (hex RGB string) to BGR u32 for Win32.
     /// When high contrast mode is active, returns the system highlight color instead.
@@ -97,13 +113,16 @@ impl AppState {
                 .store(hwnd, std::sync::atomic::Ordering::Relaxed);
         }
         if let Some(ref frame) = self.border_frame {
-            // No border while paused or in fullscreen.
-            if self.paused
-                || self.is_application_fullscreen(hwnd)
-                || self
-                    .focused_workspace()
-                    .is_some_and(|ws| ws.is_fullscreen())
-            {
+            // Paused tiling, application fullscreen, a maximized tiled window,
+            // and a WM-fullscreen workspace all put the window somewhere other
+            // than its layout slot, and the frame is drawn from that slot.
+            if !should_show_focus_frame(
+                self.paused,
+                self.is_application_fullscreen(hwnd),
+                self.window_is_maximized(hwnd),
+                self.focused_workspace()
+                    .is_some_and(|ws| ws.is_fullscreen()),
+            ) {
                 frame.hide();
                 return;
             }

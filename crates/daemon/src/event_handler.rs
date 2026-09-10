@@ -2679,6 +2679,12 @@ impl AppState {
                 // settling rather than a snap-back trigger, and remove only
                 // this target's ghost/crossfade visual immediately.
                 self.observe_tiled_window_maximized(hwnd);
+                // The frame is drawn at the layout slot, which no longer
+                // describes a window the app just maximized: refresh it so it
+                // hides instead of outlining half the screen.
+                if self.previous_focused_hwnd == Some(hwnd) {
+                    self.show_border(hwnd);
+                }
                 debug!("Tiled window {} maximized — allowing", hwnd);
             } else if defer_snapback_while_settling(
                 self.window_managed_at.get(&hwnd).copied(),
@@ -2690,7 +2696,11 @@ impl AppState {
                 // can re-assert maximize instead of being tiled narrow.
                 debug!("Deferring snap-back for settling maximized window {}", hwnd);
             } else {
-                self.window_last_maximized_at.remove(&hwnd);
+                // Remember whether the window was maximized: if it was, this
+                // branch is a restore, and the frame has to come back at the
+                // layout slot even when the spurious-move filter below skips
+                // the snap-back (a restore lands exactly on the layout rect).
+                let was_maximized = self.window_last_maximized_at.remove(&hwnd).is_some();
                 // Position-based false-positive filter: EVENT_OBJECT_LOCATIONCHANGE
                 // fires for many reasons besides actual movement (Z-order,
                 // DWM composition, focus shuffles, DPI nudges, app-internal
@@ -2773,6 +2783,11 @@ impl AppState {
                     None => false,
                 };
                 if at_expected_position {
+                    if was_maximized && self.previous_focused_hwnd == Some(hwnd) {
+                        // Restored from maximized: the window is back at its
+                        // layout slot, so the frame belongs here again.
+                        self.show_border(hwnd);
+                    }
                     debug!(
                         "Ignoring spurious MovedOrResized for {} — already at expected layout position",
                         hwnd

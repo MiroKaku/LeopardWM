@@ -36,6 +36,13 @@ All notable changes to LeopardWM will be documented in this file.
 
 ### Fixes
 
+- **The focus frame is hidden while a maximized window is on screen.** The
+  frame is drawn from the window's layout slot, but placement deliberately
+  leaves a maximized tiled window at the app's maximized rect, so starting the
+  daemon (or maximizing a window while it runs) left a half-screen frame
+  outlining a fullscreen window. The frame now hides for maximized windows and
+  comes back at the layout slot when they are restored, and both transitions
+  refresh it immediately instead of waiting for the next focus change.
 - **Maximized windows come back with their workspace.** Workspace switches
   park leaving windows off-screen; a maximized window that was parked (or left
   at the sentinel) is restored to its layout position instead of being skipped

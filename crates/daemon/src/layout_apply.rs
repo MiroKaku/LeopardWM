@@ -763,6 +763,19 @@ impl AppState {
         off_layout
     }
 
+    /// Whether the app currently has the window maximized. Placement leaves a
+    /// visible maximized tiled window at the app's maximized rect, so the layout
+    /// rect no longer describes where the window is.
+    pub(crate) fn window_is_maximized(&self, window_id: u64) -> bool {
+        // Tests drive this through injection: a synthetic window id can alias a
+        // live HWND, whose zoom state has nothing to do with the test.
+        #[cfg(test)]
+        let maximized = self.injected_maximized_hwnds.contains(&window_id);
+        #[cfg(not(test))]
+        let maximized = leopardwm_platform_win32::is_window_maximized(window_id);
+        maximized
+    }
+
     /// Fast-path check: every placement matches the last applied rect and the visible-set is unchanged.
     pub(crate) fn placements_match_last_applied(
         &self,

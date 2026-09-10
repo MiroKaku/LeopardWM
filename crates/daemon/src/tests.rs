@@ -3582,6 +3582,33 @@ fn test_managed_replacement_adopts_other_workspace() {
     assert_eq!(state.active_workspace_idx(mon), 1);
 }
 
+/// The focus frame is drawn from the window's layout slot, so it must stay
+/// hidden while the window is somewhere else — including a maximized window,
+/// which placement deliberately leaves at the app's maximized rect (the
+/// half-screen frame around a fullscreen window this guards against).
+#[test]
+fn test_focus_frame_hidden_while_layout_rect_does_not_describe_window() {
+    assert!(crate::ui_sync::should_show_focus_frame(
+        false, false, false, false
+    ));
+    assert!(
+        !crate::ui_sync::should_show_focus_frame(true, false, false, false),
+        "paused tiling"
+    );
+    assert!(
+        !crate::ui_sync::should_show_focus_frame(false, true, false, false),
+        "application fullscreen"
+    );
+    assert!(
+        !crate::ui_sync::should_show_focus_frame(false, false, true, false),
+        "maximized window sits at the app's rect, not its layout slot"
+    );
+    assert!(
+        !crate::ui_sync::should_show_focus_frame(false, false, false, true),
+        "WM fullscreen workspace"
+    );
+}
+
 /// A window that placement parked off-screen can still be the OS foreground
 /// after the switch that moved it out. That stale, non-user focus event must
 /// not drag the monitor back to the workspace the user just left.
