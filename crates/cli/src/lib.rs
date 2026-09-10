@@ -3,6 +3,9 @@
 //! Command-line interface for controlling the LeopardWM window manager.
 //!
 //! Commands are sent to the daemon via IPC (named pipe).
+//!
+//! Shipped as two binaries — `leopardwm-cli` and its short alias `lwm` — that
+//! both call [`run`], so a second target never points at a shared source file.
 
 mod args;
 mod command_map;
@@ -30,8 +33,8 @@ use ipc_client::{is_non_success_response, send_command};
 use output::print_response;
 use window_inspect::handle_doctor_windows;
 
-#[tokio::main]
-async fn main() -> Result<()> {
+/// Parse arguments and run the requested command.
+pub async fn run() -> Result<()> {
     let cli = Cli::parse();
 
     // Handle locally-executed commands (do not use IPC command mapping)

@@ -6,16 +6,19 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 description = "Command-line interface for controlling LeopardWM"
+# Both binaries are thin entry points over src/lib.rs, so implicit bin
+# discovery would only rediscover them under the same names.
+autobins = false
 
 [[bin]]
 name = "leopardwm-cli"
-path = "src/main.rs"
+path = "src/bin/leopardwm-cli.rs"
 
-# Short alias — same source, just a faster name to type. Distribution
+# Short alias — same entry point, just a faster name to type. Distribution
 # channels ship both binaries.
 [[bin]]
 name = "lwm"
-path = "src/main.rs"
+path = "src/bin/lwm.rs"
 
 [dependencies]
 leopardwm-ipc = { path = "../ipc" }

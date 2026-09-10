@@ -278,9 +278,8 @@ impl AppState {
                 #[cfg(test)]
                 let offscreen = self.injected_offscreen_hwnds.contains(&placement.window_id);
                 #[cfg(not(test))]
-                let offscreen = leopardwm_platform_win32::is_window_at_offscreen_sentinel(
-                    placement.window_id,
-                );
+                let offscreen =
+                    leopardwm_platform_win32::is_window_at_offscreen_sentinel(placement.window_id);
                 if !should_dispatch_visible_tiled_placement(
                     maximized,
                     settling,

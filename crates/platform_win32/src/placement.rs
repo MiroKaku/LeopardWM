@@ -730,9 +730,7 @@ fn apply_placements_inner(
 pub fn release_placement_park(window_id: WindowId) {
     let released = {
         let mut cloaked = lock_cloaked();
-        cloaked
-            .as_mut()
-            .is_some_and(|set| set.remove(&window_id))
+        cloaked.as_mut().is_some_and(|set| set.remove(&window_id))
     };
     if released {
         apply_cloak_state(window_id);
@@ -2600,7 +2598,11 @@ mod tests {
             is_placement_cloaked(wid),
             "successful recovery must retain a ghost-owned effective cloak"
         );
-        assert!(recover_placement_parked(wid, SET_WINDOW_POS_FLAGS(0), |_| true));
+        assert!(recover_placement_parked(
+            wid,
+            SET_WINDOW_POS_FLAGS(0),
+            |_| true
+        ));
         assert!(
             !is_placement_parked(wid),
             "the synchronous landing pass releases ownership the frames kept"
