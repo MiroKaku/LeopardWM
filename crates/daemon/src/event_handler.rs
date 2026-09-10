@@ -1402,7 +1402,7 @@ impl AppState {
         if let Some(ref transition) = self.layout_transition {
             for wid in transition.exit_rects.keys() {
                 if !self.is_application_fullscreen(*wid) {
-                    let _ = leopardwm_platform_win32::move_window_offscreen(*wid);
+                    let _ = leopardwm_platform_win32::park_window_for_placement(*wid);
                 }
             }
         }
@@ -1490,7 +1490,7 @@ impl AppState {
         } else {
             for (wid, _) in &old_placements {
                 if !self.is_application_fullscreen(*wid) {
-                    let _ = leopardwm_platform_win32::move_window_offscreen(*wid);
+                    let _ = leopardwm_platform_win32::park_window_for_placement(*wid);
                 }
             }
         }

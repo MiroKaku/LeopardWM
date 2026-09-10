@@ -645,25 +645,56 @@ where
     released
 }
 
+/// A visible tiled maximized window is left untouched while it is on screen
+/// and not parked: the app owns the maximized rect and layout must not fight
+/// it. A parked or off-screen maximized window is the opposite case — the
+/// layout owns its position (workspace switch moved it away) and skipping it
+/// would strand it hidden when its workspace comes back.
+fn should_skip_visible_tiled_maximized(is_zoomed: bool, parked: bool, offscreen: bool) -> bool {
+    is_zoomed && !parked && !offscreen
+}
+
+/// Whether the window currently sits at the MoveOffScreen sentinel.
+fn window_is_at_offscreen_sentinel(window_id: WindowId) -> bool {
+    let Ok(hwnd) = window_id_to_hwnd(window_id) else {
+        return false;
+    };
+    let mut rect = RECT::default();
+    unsafe {
+        if GetWindowRect(hwnd, &mut rect).is_err() {
+            return false;
+        }
+    }
+    crate::visibility::is_move_offscreen_sentinel_position(rect.left, rect.top)
+}
+
 fn skip_visible_tiled_maximized(
     placement: &WindowPlacement,
     is_zoomed: bool,
     cache: Option<&mut PlacementCache>,
     async_flag: SET_WINDOW_POS_FLAGS,
 ) -> bool {
-    let skip = placement.visibility == Visibility::Visible
-        && placement.column_index != usize::MAX
-        && is_zoomed;
-    if skip {
-        if let Some(cache) = cache {
-            cache.positions.remove(&placement.window_id);
-        }
-        // Skipped entries never reach `uncloak_becoming_visible` or
-        // `sync_cloak_state`, so a window held in `GLOBAL_CLOAKED` from an
-        // earlier off-screen placement would stay cloaked while visible in
-        // the layout. Return a placement-parked maximized HWND before
-        // releasing that cloak. SWP_NOSIZE deliberately preserves maximized
-        // dimensions and does not restore ordinary visible maximized windows.
+    let visible_tiled =
+        placement.visibility == Visibility::Visible && placement.column_index != usize::MAX;
+    if !visible_tiled || !is_zoomed {
+        return false;
+    }
+
+    let parked = is_placement_parked(placement.window_id);
+    let offscreen = window_is_at_offscreen_sentinel(placement.window_id);
+    if let Some(cache) = cache {
+        cache.positions.remove(&placement.window_id);
+    }
+
+    if should_skip_visible_tiled_maximized(true, parked, offscreen) {
+        return true;
+    }
+
+    // Recover the maximized window at its layout position without resizing it
+    // (SWP_NOSIZE preserves the maximized dimensions). A parked window also
+    // needs its cloak released; an off-screen one was moved by a plain
+    // `move_window_offscreen` and only needs the position restored.
+    if parked {
         let _ = recover_placement_parked(placement.window_id, async_flag, |flags| {
             let Ok(hwnd) = window_id_to_hwnd(placement.window_id) else {
                 return false;
@@ -672,8 +703,18 @@ fn skip_visible_tiled_maximized(
                 SetWindowPos(hwnd, None, placement.rect.x, placement.rect.y, 0, 0, flags).is_ok()
             }
         });
+    } else {
+        let Ok(hwnd) = window_id_to_hwnd(placement.window_id) else {
+            return true;
+        };
+        let flags = SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | async_flag;
+        unsafe {
+            let _ = SetWindowPos(hwnd, None, placement.rect.x, placement.rect.y, 0, 0, flags);
+        }
     }
-    skip
+    // Still reported as a maximized skip so the caller keeps its bookkeeping
+    // (the layout rect is not claimed as applied).
+    true
 }
 
 /// Build the defer-entry list for all placements, skipping cache-unchanged windows.
@@ -2293,6 +2334,17 @@ mod tests {
         if had_ghost_before {
             mark_ghost_cloaked(wid);
         }
+    }
+
+    /// A maximized window is only left untouched while it is on screen and
+    /// not parked; a parked or off-screen one must be recovered to its layout
+    /// position so switching back to its workspace shows it again.
+    #[test]
+    fn test_should_skip_visible_tiled_maximized_recovers_stranded_windows() {
+        assert!(should_skip_visible_tiled_maximized(true, false, false));
+        assert!(!should_skip_visible_tiled_maximized(true, true, false));
+        assert!(!should_skip_visible_tiled_maximized(true, false, true));
+        assert!(!should_skip_visible_tiled_maximized(false, false, false));
     }
 
     /// Regression: a visible tiled placement skipped because the HWND is
