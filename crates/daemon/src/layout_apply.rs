@@ -751,7 +751,7 @@ impl AppState {
     /// position covers a window that ended up off-screen while the marker was
     /// released (the window would otherwise look "already placed" forever and
     /// never be moved back into view).
-    fn window_is_off_layout(&self, window_id: u64) -> bool {
+    pub(crate) fn window_is_off_layout(&self, window_id: u64) -> bool {
         // Tests drive this through injection: their synthetic window ids can
         // alias live HWNDs in the test process, which would make the platform
         // probe report unrelated windows as off-screen.

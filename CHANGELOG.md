@@ -46,6 +46,9 @@ All notable changes to LeopardWM will be documented in this file.
   straight back to the workspace it was leaving. The landing pass that returns
   the window re-applies the remembered maximize without activating it
   (`SetWindowPlacement`), so a window that was maximized comes back maximized.
+  A focus event for a parked window that no user action produced no longer
+  switches the monitor back to the workspace it was parked from, so a late
+  foreground event cannot undo the switch the user just made.
   This also fixes the MoveOffScreen sentinel itself: it sat at `-100000`, which
   Windows clamps into its 16-bit window coordinate space (`-32768`), so
   off-screen windows were never detected and could not be restored by the

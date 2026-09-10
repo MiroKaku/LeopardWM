@@ -3582,6 +3582,49 @@ fn test_managed_replacement_adopts_other_workspace() {
     assert_eq!(state.active_workspace_idx(mon), 1);
 }
 
+/// A window that placement parked off-screen can still be the OS foreground
+/// after the switch that moved it out. That stale, non-user focus event must
+/// not drag the monitor back to the workspace the user just left.
+#[test]
+fn test_focus_for_parked_window_does_not_follow_workspace() {
+    fn state_with_window_on_hidden_workspace() -> AppState {
+        let mut state = two_managed_windows();
+        let mon = state.focused_monitor;
+        state.ensure_workspace_exists(mon, 1);
+        if let Some((home_mon, home_idx)) = state.find_window_workspace(200) {
+            let _ = state
+                .workspaces
+                .get_mut(&home_mon)
+                .and_then(|v| v.get_mut(home_idx))
+                .map(|ws| ws.remove_window(200));
+        }
+        state.workspaces.get_mut(&mon).unwrap()[1]
+            .insert_window(200, Some(800))
+            .unwrap();
+        state.previous_focused_hwnd = None;
+        state.injected_user_input_age_ms = Some(Some(60_000));
+        state
+    }
+
+    let mut parked = state_with_window_on_hidden_workspace();
+    parked.injected_offscreen_hwnds.insert(200);
+    parked.handle_window_event(WindowEvent::Focused(200, 0));
+
+    assert_eq!(
+        parked.active_workspace_idx(parked.focused_monitor),
+        0,
+        "a stale focus event for a parked window must not follow its workspace"
+    );
+    assert_ne!(parked.previous_focused_hwnd, Some(200));
+
+    // The same event for a window that is on screen still follows it.
+    let mut on_screen = state_with_window_on_hidden_workspace();
+    on_screen.handle_window_event(WindowEvent::Focused(200, 0));
+
+    assert_eq!(on_screen.active_workspace_idx(on_screen.focused_monitor), 1);
+    assert_eq!(on_screen.previous_focused_hwnd, Some(200));
+}
+
 #[test]
 fn test_managed_replacement_parks_old_workspace_peer() {
     let mut state = two_managed_windows();
@@ -7170,6 +7213,10 @@ fn test_workspace_switch_suppresses_old_focus_events_without_mutation() {
 fn test_workspace_switch_post_arm_old_focus_follows_and_clears_intent() {
     let mut state = switch_to_empty_workspace_with_pending_focus();
     let intent = state.pending_workspace_switch_focus.unwrap();
+    // The old window regaining focus follows back only when the user asked for
+    // it: the parked window is off-screen, so a stale non-user focus event for
+    // it must not drag the monitor back to the workspace just left.
+    state.injected_user_input_age_ms = Some(Some(0));
 
     state.handle_window_event(WindowEvent::Focused(
         intent.source_hwnd,

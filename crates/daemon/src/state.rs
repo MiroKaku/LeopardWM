@@ -630,6 +630,11 @@ pub(crate) struct AppState {
     pub(crate) injected_offscreen_hwnds: HashSet<u64>,
     #[cfg(test)]
     pub(crate) injected_foreground_hwnd: Option<Option<u64>>,
+    /// Test-only override for how long ago the last user input happened. A real
+    /// click on the machine during a test run would otherwise flip the
+    /// `user_initiated` classification the focus paths depend on.
+    #[cfg(test)]
+    pub(crate) injected_user_input_age_ms: Option<Option<u32>>,
     #[cfg(test)]
     pub(crate) injected_foreground_is_valid: Option<bool>,
     #[cfg(test)]
@@ -917,6 +922,8 @@ impl AppState {
             injected_offscreen_hwnds: HashSet::new(),
             #[cfg(test)]
             injected_foreground_hwnd: None,
+            #[cfg(test)]
+            injected_user_input_age_ms: None,
             #[cfg(test)]
             injected_foreground_is_valid: None,
             #[cfg(test)]
