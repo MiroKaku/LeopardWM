@@ -987,6 +987,9 @@ impl AppState {
             // Drop any size-violation suspect state so the map stays bounded and
             // a recycled HWND doesn't inherit it.
             leopardwm_platform_win32::clear_suspected_oversize(hwnd);
+            // Forget a remembered maximize: a recycled HWND must not be
+            // maximized by a landing pass that belonged to its predecessor.
+            leopardwm_platform_win32::clear_parked_maximized(hwnd);
             // Scrub a window that dies while its monitor is stashed (disconnected),
             // so it isn't resurrected as a ghost column when the monitor returns.
             for (ws_vec, _) in self.stashed_monitor_layouts.values_mut() {

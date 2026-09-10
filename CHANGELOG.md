@@ -40,13 +40,16 @@ All notable changes to LeopardWM will be documented in this file.
   park leaving windows off-screen; a maximized window that was parked (or left
   at the sentinel) is restored to its layout position instead of being skipped
   as "maximized", so switching back shows it again. Parking also drops the
-  maximize first (`SW_SHOWNOACTIVATE`), because Windows keeps a maximized
-  window at its maximized rect: the layout could only ever move it to the last
-  animation frame, and restoring focus would bounce the monitor straight back
-  to the workspace it was leaving. This also fixes the MoveOffScreen sentinel
-  itself: it sat at `-100000`, which Windows clamps into its 16-bit window
-  coordinate space (`-32768`), so off-screen windows were never detected and
-  could not be restored by the parking, emergency-restore, or shutdown paths.
+  maximize first (`SW_SHOWNOACTIVATE`) and remembers it, because Windows keeps
+  a maximized window at its maximized rect: the layout could only ever move it
+  to the last animation frame, and restoring focus would bounce the monitor
+  straight back to the workspace it was leaving. The landing pass that returns
+  the window re-applies the remembered maximize without activating it
+  (`SetWindowPlacement`), so a window that was maximized comes back maximized.
+  This also fixes the MoveOffScreen sentinel itself: it sat at `-100000`, which
+  Windows clamps into its 16-bit window coordinate space (`-32768`), so
+  off-screen windows were never detected and could not be restored by the
+  parking, emergency-restore, or shutdown paths.
 - **CapsLock can now be used as a hotkey modifier.** Config strings like
   `CapsLock+H` are parsed by the daemon and the keyboard hook swallows the
   key while a CapsLock hotkey is registered, so it never toggles uppercase.

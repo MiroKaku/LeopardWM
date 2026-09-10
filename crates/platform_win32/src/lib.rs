@@ -60,12 +60,13 @@ pub use focus::{
 pub use placement::apply_cloak_state;
 pub use placement::clear_suspected_oversize;
 pub use placement::{
-    apply_placements, clear_inset_cache, drain_ghost_cloaked, dwm_cloak_window, dwm_uncloak_all,
-    dwm_uncloak_window, get_window_frame_insets, get_window_invisible_insets, is_placement_cloaked,
-    is_placement_parked, is_window_at_offscreen_sentinel, mark_ghost_cloaked,
-    park_window_for_placement, release_placement_park, set_dwm_transitions_disabled,
-    unmark_ghost_cloaked, visible_rect_to_frame_rect, ApplyPlacementsResult, HeightViolation,
-    PlacementCache, WidthViolation,
+    apply_placements, clear_inset_cache, clear_parked_maximized, drain_ghost_cloaked,
+    dwm_cloak_window, dwm_uncloak_all, dwm_uncloak_window, get_window_frame_insets,
+    get_window_invisible_insets, is_placement_cloaked, is_placement_parked,
+    is_window_at_offscreen_sentinel, mark_ghost_cloaked, park_window_for_placement,
+    release_placement_park, set_dwm_transitions_disabled, unmark_ghost_cloaked,
+    visible_rect_to_frame_rect, ApplyPlacementsResult, HeightViolation, PlacementCache,
+    WidthViolation,
 };
 pub use system::{
     are_animations_enabled, get_system_highlight_color_bgr, is_high_contrast_enabled,

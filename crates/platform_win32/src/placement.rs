@@ -13,9 +13,10 @@ use windows::Win32::Graphics::Dwm::{
     DWMWINDOWATTRIBUTE,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    BeginDeferWindowPos, DeferWindowPos, EndDeferWindowPos, GetClassNameW, GetWindowRect, IsIconic,
-    IsWindow, IsZoomed, SetWindowPos, ShowWindow, SET_WINDOW_POS_FLAGS, SWP_ASYNCWINDOWPOS,
-    SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER, SW_SHOWNOACTIVATE,
+    BeginDeferWindowPos, DeferWindowPos, EndDeferWindowPos, GetClassNameW, GetWindowPlacement,
+    GetWindowRect, IsIconic, IsWindow, IsZoomed, SetWindowPlacement, SetWindowPos, ShowWindow,
+    SET_WINDOW_POS_FLAGS, SWP_ASYNCWINDOWPOS, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOSIZE,
+    SWP_NOZORDER, SW_SHOWMAXIMIZED, SW_SHOWNOACTIVATE, WINDOWPLACEMENT,
 };
 
 /// Undocumented but well-known DWM attribute for cloaking windows.
@@ -256,6 +257,71 @@ fn mark_placement_parked(window_id: WindowId) {
     cloaked.get_or_insert_with(HashSet::new).insert(window_id);
 }
 
+/// Lock PARKED_MAXIMIZED, recovering from poison (same policy as the cloak set).
+fn lock_parked_maximized() -> std::sync::MutexGuard<'static, Option<HashSet<WindowId>>> {
+    PARKED_MAXIMIZED
+        .lock()
+        .unwrap_or_else(crate::recover_poisoned_mutex)
+}
+
+fn mark_parked_maximized(window_id: WindowId) {
+    lock_parked_maximized()
+        .get_or_insert_with(HashSet::new)
+        .insert(window_id);
+}
+
+/// Whether `window_id` was maximized when it was parked; consumes the mark so
+/// a maximize is restored exactly once.
+fn take_parked_maximized(window_id: WindowId) -> bool {
+    let mut guard = lock_parked_maximized();
+    guard.as_mut().is_some_and(|set| set.remove(&window_id))
+}
+
+/// Forget a remembered maximize without restoring it. For a recycled HWND the
+/// mark must not survive its window: a new window reusing the id would be
+/// maximized by a landing pass it has nothing to do with.
+pub fn clear_parked_maximized(window_id: WindowId) {
+    let mut guard = lock_parked_maximized();
+    if let Some(set) = guard.as_mut() {
+        set.remove(&window_id);
+    }
+}
+
+/// Maximize a window without activating it.
+///
+/// `SetWindowPlacement` is used instead of `ShowWindow(SW_MAXIMIZE)` because
+/// maximizing must not steal focus: the daemon's focus-follows-window logic
+/// would otherwise drag the monitor back to the workspace the window came from.
+fn maximize_without_activation(hwnd: HWND) {
+    let mut placement = WINDOWPLACEMENT {
+        length: std::mem::size_of::<WINDOWPLACEMENT>() as u32,
+        ..Default::default()
+    };
+    if unsafe { GetWindowPlacement(hwnd, &mut placement) }.is_err() {
+        return;
+    }
+    placement.showCmd = SW_SHOWMAXIMIZED.0 as u32;
+    unsafe {
+        let _ = SetWindowPlacement(hwnd, &placement);
+    }
+}
+
+/// Re-apply the maximize a window had before parking dropped it, now that the
+/// landing pass has placed it back on its workspace. Only windows that landed
+/// visible are restored: anything else is still parked or belongs to another
+/// workspace, where the maximize stays remembered.
+fn restore_parked_maximizes(entries: &[DeferEntry], failed_window_ids: &HashSet<u64>) {
+    for entry in entries {
+        if entry.visibility != Visibility::Visible || failed_window_ids.contains(&entry.window_id) {
+            continue;
+        }
+        if !take_parked_maximized(entry.window_id) {
+            continue;
+        }
+        maximize_without_activation(entry.hwnd);
+    }
+}
+
 /// Park a window at the placement sentinel and record that placement owns its
 /// return-to-layout recovery. The logical park is rolled back if the physical
 /// move fails, so visible maximized recovery never infers ownership from raw
@@ -267,10 +333,11 @@ pub fn park_window_for_placement(window_id: WindowId) -> Result<(), Win32Error> 
     // A maximized window cannot be parked *and* restored reliably: Windows
     // keeps it at its maximized rect, so the layout's return pass is treated
     // as "the app owns this rect" and the window is left wherever the last
-    // animation frame dropped it. Drop the maximize before parking instead —
-    // the layout owns a tiled window's rect, so returning to the workspace
-    // then places it like any other window.
+    // animation frame dropped it. Drop the maximize before parking instead and
+    // remember it: the landing pass puts the window back on its workspace and
+    // then restores the maximize it had.
     if unsafe { IsZoomed(hwnd).as_bool() } {
+        mark_parked_maximized(window_id);
         unsafe {
             // SW_SHOWNOACTIVATE, not SW_RESTORE: restoring must not steal focus,
             // or the daemon's focus-follows-window logic bounces the monitor
@@ -295,6 +362,12 @@ pub fn park_window_for_placement(window_id: WindowId) -> Result<(), Win32Error> 
             if let Some(set) = cloaked.as_mut() {
                 set.remove(&window_id);
             }
+        }
+        // The park never happened, so the window stays on its workspace and
+        // keeps the maximize we dropped for it. Consume the mark here, or a
+        // later landing pass would maximize a window that never left.
+        if take_parked_maximized(window_id) {
+            maximize_without_activation(hwnd);
         }
         apply_cloak_state(window_id);
         return Err(Win32Error::SetPositionFailed(format!(
@@ -339,6 +412,12 @@ fn uncloak_all_tracked() {
 
 /// Global set of window IDs currently cloaked by the placement system.
 static GLOBAL_CLOAKED: Mutex<Option<HashSet<WindowId>>> = Mutex::new(None);
+
+/// Windows that were maximized when placement parked them. Parking drops the
+/// maximize (Windows pins a maximized window to its maximized rect, so it can
+/// neither be parked nor moved back), and the landing pass that returns the
+/// window to its workspace restores it from here.
+static PARKED_MAXIMIZED: Mutex<Option<HashSet<WindowId>>> = Mutex::new(None);
 
 /// Cache of last-applied window placements and border insets.
 ///
@@ -618,6 +697,13 @@ fn apply_placements_inner(
             })
             .collect();
         nudge_sticky_compositor_windows(&nudge_targets);
+    }
+
+    // Restore the maximizes parking had to drop. Landing pass only: during
+    // animation frames the layout is still moving the window, and maximizing it
+    // there re-pins it to the maximized rect mid-flight.
+    if async_flag == SET_WINDOW_POS_FLAGS(0) {
+        restore_parked_maximizes(&entries, &failed_window_ids);
     }
 
     tracing::debug!(
@@ -2383,6 +2469,37 @@ mod tests {
         assert!(!should_skip_visible_tiled_maximized(true, true, false));
         assert!(!should_skip_visible_tiled_maximized(true, false, true));
         assert!(!should_skip_visible_tiled_maximized(false, false, false));
+    }
+
+    /// Parking remembers a maximize it had to drop, and a landing pass consumes
+    /// it exactly once, so a window comes back to its workspace in the state it
+    /// left in.
+    #[test]
+    fn test_parked_maximize_mark_is_consumed_once() {
+        let wid: WindowId = 0xFFFF_FFFF_FFFF_FF11;
+        clear_parked_maximized(wid);
+
+        assert!(
+            !take_parked_maximized(wid),
+            "a window that was never parked maximized is left alone"
+        );
+
+        mark_parked_maximized(wid);
+        assert!(
+            take_parked_maximized(wid),
+            "the landing pass restores the maximize the park dropped"
+        );
+        assert!(
+            !take_parked_maximized(wid),
+            "a later landing must not re-maximize a window the user restored"
+        );
+
+        mark_parked_maximized(wid);
+        clear_parked_maximized(wid);
+        assert!(
+            !take_parked_maximized(wid),
+            "a window that died while parked leaves no mark for a recycled HWND"
+        );
     }
 
     /// Regression: a visible tiled placement skipped because the HWND is
