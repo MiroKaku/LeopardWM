@@ -62,9 +62,10 @@ pub use placement::clear_suspected_oversize;
 pub use placement::{
     apply_placements, clear_inset_cache, drain_ghost_cloaked, dwm_cloak_window, dwm_uncloak_all,
     dwm_uncloak_window, get_window_frame_insets, get_window_invisible_insets, is_placement_cloaked,
-    is_placement_parked, mark_ghost_cloaked, park_window_for_placement,
-    set_dwm_transitions_disabled, unmark_ghost_cloaked, visible_rect_to_frame_rect,
-    ApplyPlacementsResult, HeightViolation, PlacementCache, WidthViolation,
+    is_placement_parked, is_window_at_offscreen_sentinel, mark_ghost_cloaked,
+    park_window_for_placement, release_placement_park, set_dwm_transitions_disabled,
+    unmark_ghost_cloaked, visible_rect_to_frame_rect, ApplyPlacementsResult, HeightViolation,
+    PlacementCache, WidthViolation,
 };
 pub use system::{
     are_animations_enabled, get_system_highlight_color_bgr, is_high_contrast_enabled,
@@ -95,7 +96,17 @@ use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging::WM_USER;
 
 /// Sentinel coordinate used by MoveOffScreen strategy.
-pub const MOVE_OFFSCREEN_SENTINEL_COORD: i32 = -100_000;
+///
+/// Windows stores window positions in a signed 16-bit coordinate space, so
+/// positions below `i16::MIN` are silently clamped to `-32_768`. The old
+/// `-100_000` therefore never showed up on the window, and every
+/// `is_move_offscreen_sentinel_position` check missed: parked windows were
+/// invisible to off-screen detection and could not be restored.
+///
+/// The sentinel has to stay inside the reachable range while remaining below
+/// the `-32_000` Windows writes into minimized windows, so that a parked
+/// window matches (and a minimized one does not).
+pub const MOVE_OFFSCREEN_SENTINEL_COORD: i32 = -32_001;
 
 /// Custom message to signal the gesture/mouse-hook thread to stop.
 pub(crate) const WM_QUIT_LLHOOK_THREAD: u32 = WM_USER + 2;

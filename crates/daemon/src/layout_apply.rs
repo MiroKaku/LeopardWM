@@ -13,8 +13,12 @@ pub(crate) fn should_dispatch_visible_tiled_placement(
     maximized: bool,
     settling: bool,
     placement_parked: bool,
+    placement_offscreen: bool,
 ) -> bool {
-    !settling && (!maximized || placement_parked)
+    // A parked or off-screen window is not where the layout wants it, so the
+    // "the app owns its maximized rect" exemption does not apply: skipping it
+    // would strand it hidden until the user restores it by hand.
+    !settling && (!maximized || placement_parked || placement_offscreen)
 }
 
 fn bounded_timeout_diagnostic(value: String) -> Option<String> {
@@ -271,10 +275,17 @@ impl AppState {
                     now,
                 );
                 let maximized = maximized.contains(&placement.window_id);
+                #[cfg(test)]
+                let offscreen = self.injected_offscreen_hwnds.contains(&placement.window_id);
+                #[cfg(not(test))]
+                let offscreen = leopardwm_platform_win32::is_window_at_offscreen_sentinel(
+                    placement.window_id,
+                );
                 if !should_dispatch_visible_tiled_placement(
                     maximized,
                     settling,
                     is_placement_parked(placement.window_id),
+                    offscreen,
                 ) {
                     return false;
                 }
@@ -735,15 +746,35 @@ impl AppState {
         all_placements
     }
 
+    /// Whether placement has the window off-screen, so its recorded layout
+    /// rect no longer describes where the window is. Both signals count:
+    /// `parked` is the ownership marker placement sets, and the sentinel
+    /// position covers a window that ended up off-screen while the marker was
+    /// released (the window would otherwise look "already placed" forever and
+    /// never be moved back into view).
+    fn window_is_off_layout(&self, window_id: u64) -> bool {
+        // Tests drive this through injection: their synthetic window ids can
+        // alias live HWNDs in the test process, which would make the platform
+        // probe report unrelated windows as off-screen.
+        #[cfg(test)]
+        let off_layout = self.injected_offscreen_hwnds.contains(&window_id);
+        #[cfg(not(test))]
+        let off_layout = leopardwm_platform_win32::is_placement_parked(window_id)
+            || leopardwm_platform_win32::is_window_at_offscreen_sentinel(window_id);
+        off_layout
+    }
+
     /// Fast-path check: every placement matches the last applied rect and the visible-set is unchanged.
-    fn placements_match_last_applied(
+    pub(crate) fn placements_match_last_applied(
         &self,
         all_placements: &[leopardwm_core_layout::WindowPlacement],
     ) -> bool {
         all_placements.iter().all(|p| {
             let expected = self.last_placed_layout_rects.get(&p.window_id);
             match p.visibility {
-                leopardwm_core_layout::Visibility::Visible => expected == Some(&p.rect),
+                leopardwm_core_layout::Visibility::Visible => {
+                    !self.window_is_off_layout(p.window_id) && expected == Some(&p.rect)
+                }
                 _ => expected.is_none(),
             }
         }) && {
@@ -779,7 +810,12 @@ impl AppState {
         self.last_placed_layout_rects
             .retain(|id, _| active_ids.contains(id));
         for p in all_placements {
-            if matches!(p.visibility, leopardwm_core_layout::Visibility::Visible) {
+            // Off-screen windows are deliberately not where the layout asked
+            // them to be, so recording the layout rect would make the next
+            // apply believe they are already placed.
+            if matches!(p.visibility, leopardwm_core_layout::Visibility::Visible)
+                && !self.window_is_off_layout(p.window_id)
+            {
                 self.last_placed_layout_rects.insert(p.window_id, p.rect);
             } else {
                 self.last_placed_layout_rects.remove(&p.window_id);

@@ -440,9 +440,24 @@ fn test_placement_parked_maximized_target_reaches_sync_and_animation_dispatch() 
     };
     let maximized = HashSet::from([100]);
 
-    assert!(!should_dispatch_visible_tiled_placement(true, false, false));
-    assert!(should_dispatch_visible_tiled_placement(true, false, true));
-    assert!(!should_dispatch_visible_tiled_placement(true, true, true));
+    assert!(!should_dispatch_visible_tiled_placement(
+        true, false, false, false
+    ));
+    assert!(should_dispatch_visible_tiled_placement(
+        true, false, true, false
+    ));
+    assert!(!should_dispatch_visible_tiled_placement(
+        true, true, true, false
+    ));
+    // An off-screen maximized window the app parked itself has to be
+    // recovered even without the placement-park marker: it is not at the
+    // rect the app owns, so skipping it would leave it hidden for good.
+    assert!(should_dispatch_visible_tiled_placement(
+        true, false, false, true
+    ));
+    assert!(!should_dispatch_visible_tiled_placement(
+        true, true, false, true
+    ));
 
     let mut sync_state = AppState::new_with_config(test_config(), test_monitors());
     assert!(sync_state
@@ -472,6 +487,18 @@ fn test_placement_parked_maximized_target_reaches_sync_and_animation_dispatch() 
         "placement-owned parking must reach animation platform recovery"
     );
 
+    let mut offscreen_state = AppState::new_with_config(test_config(), test_monitors());
+    offscreen_state.injected_offscreen_hwnds.insert(100);
+    assert_eq!(
+        offscreen_state
+            .prepare_physical_placements_with_parked(vec![placement.clone()], &maximized, |_| false)
+            .iter()
+            .map(|placement| placement.window_id)
+            .collect::<Vec<_>>(),
+        vec![100],
+        "an off-screen maximized window must reach recovery without the park marker"
+    );
+
     let mut settling_state = AppState::new_with_config(test_config(), test_monitors());
     let now = Instant::now();
     settling_state.window_managed_at.insert(100, now);
@@ -479,6 +506,38 @@ fn test_placement_parked_maximized_target_reaches_sync_and_animation_dispatch() 
     assert!(settling_state
         .prepare_physical_placements_with_parked(vec![placement.clone()], &maximized, |_| true)
         .is_empty());
+}
+
+#[test]
+fn test_offscreen_window_is_not_treated_as_already_placed() {
+    use leopardwm_core_layout::{Visibility, WindowPlacement};
+
+    let mut state = AppState::new_with_config(test_config(), test_monitors());
+    let rect = Rect::new(0, 0, 800, 1040);
+    state.last_placed_layout_rects.insert(100, rect);
+    let placements = vec![WindowPlacement {
+        window_id: 100,
+        rect,
+        visibility: Visibility::Visible,
+        column_index: 0,
+    }];
+
+    assert!(
+        state.placements_match_last_applied(&placements),
+        "control: a window on screen whose recorded rect matches is already placed"
+    );
+
+    state.injected_offscreen_hwnds.insert(100);
+    assert!(
+        !state.placements_match_last_applied(&placements),
+        "an off-screen window must not short-circuit the apply that brings it back"
+    );
+
+    state.record_last_placed_rects(&placements);
+    assert!(
+        !state.last_placed_layout_rects.contains_key(&100),
+        "an off-screen window must not be recorded as sitting at its layout rect"
+    );
 }
 
 #[test]

@@ -417,6 +417,27 @@ mod tests {
     }
 
     #[test]
+    fn test_move_offscreen_sentinel_stays_inside_window_coordinate_space() {
+        // Windows stores window positions in a signed 16-bit range and clamps
+        // anything below it, so a sentinel outside that range is never actually
+        // written to the window: every off-screen check misses and parked
+        // windows can neither be detected nor restored.
+        let sentinel = MOVE_OFFSCREEN_SENTINEL_COORD;
+        let coordinate_min = i16::MIN as i32;
+        let minimized_position = -32_000;
+        assert!(
+            sentinel >= coordinate_min,
+            "sentinel must be reachable, otherwise Windows clamps it"
+        );
+        // Stay clear of the position Windows gives minimized windows so a
+        // minimized window is never mistaken for a parked one.
+        assert!(
+            sentinel < minimized_position,
+            "sentinel must stay below the minimized-window position"
+        );
+    }
+
+    #[test]
     fn test_move_offscreen_sentinel_detection() {
         assert!(is_move_offscreen_sentinel_position(
             MOVE_OFFSCREEN_SENTINEL_COORD,

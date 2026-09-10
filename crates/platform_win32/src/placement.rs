@@ -14,8 +14,8 @@ use windows::Win32::Graphics::Dwm::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     BeginDeferWindowPos, DeferWindowPos, EndDeferWindowPos, GetClassNameW, GetWindowRect, IsIconic,
-    IsWindow, IsZoomed, SetWindowPos, SET_WINDOW_POS_FLAGS, SWP_ASYNCWINDOWPOS, SWP_FRAMECHANGED,
-    SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER,
+    IsWindow, IsZoomed, SetWindowPos, ShowWindow, SET_WINDOW_POS_FLAGS, SWP_ASYNCWINDOWPOS,
+    SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER, SW_SHOWNOACTIVATE,
 };
 
 /// Undocumented but well-known DWM attribute for cloaking windows.
@@ -264,6 +264,20 @@ pub fn park_window_for_placement(window_id: WindowId) -> Result<(), Win32Error> 
     let hwnd = window_id_to_hwnd(window_id)?;
     mark_placement_parked(window_id);
     apply_cloak_state(window_id);
+    // A maximized window cannot be parked *and* restored reliably: Windows
+    // keeps it at its maximized rect, so the layout's return pass is treated
+    // as "the app owns this rect" and the window is left wherever the last
+    // animation frame dropped it. Drop the maximize before parking instead —
+    // the layout owns a tiled window's rect, so returning to the workspace
+    // then places it like any other window.
+    if unsafe { IsZoomed(hwnd).as_bool() } {
+        unsafe {
+            // SW_SHOWNOACTIVATE, not SW_RESTORE: restoring must not steal focus,
+            // or the daemon's focus-follows-window logic bounces the monitor
+            // straight back to the workspace we are parking the window from.
+            let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+        }
+    }
     let moved = unsafe {
         SetWindowPos(
             hwnd,
@@ -620,6 +634,25 @@ fn apply_placements_inner(
     })
 }
 
+/// Release placement's ownership of a parked window.
+///
+/// Ownership has to survive animation: frames position a parked window at
+/// intermediate rects, and dropping the park there makes the
+/// maximized-placement exemption skip the remaining frames, leaving the window
+/// stranded mid-flight. Callers release it only once the window lands at its
+/// layout rect.
+pub fn release_placement_park(window_id: WindowId) {
+    let released = {
+        let mut cloaked = lock_cloaked();
+        cloaked
+            .as_mut()
+            .is_some_and(|set| set.remove(&window_id))
+    };
+    if released {
+        apply_cloak_state(window_id);
+    }
+}
+
 fn recover_placement_parked<F>(
     window_id: WindowId,
     async_flag: SET_WINDOW_POS_FLAGS,
@@ -635,14 +668,10 @@ where
     if !position(flags) {
         return false;
     }
-    let released = {
-        let mut cloaked = lock_cloaked();
-        cloaked.as_mut().is_some_and(|set| set.remove(&window_id))
-    };
-    if released {
-        apply_cloak_state(window_id);
+    if async_flag == SET_WINDOW_POS_FLAGS(0) {
+        release_placement_park(window_id);
     }
-    released
+    true
 }
 
 /// A visible tiled maximized window is left untouched while it is on screen
@@ -655,7 +684,12 @@ fn should_skip_visible_tiled_maximized(is_zoomed: bool, parked: bool, offscreen:
 }
 
 /// Whether the window currently sits at the MoveOffScreen sentinel.
-fn window_is_at_offscreen_sentinel(window_id: WindowId) -> bool {
+///
+/// Placement parks windows there on workspace switches, so a visible window at
+/// the sentinel means the layout still owns its position and must move it back
+/// into view. Callers that run on the daemon side use this to tell a parked
+/// window apart from one the user actually placed on screen.
+pub fn is_window_at_offscreen_sentinel(window_id: WindowId) -> bool {
     let Ok(hwnd) = window_id_to_hwnd(window_id) else {
         return false;
     };
@@ -681,7 +715,7 @@ fn skip_visible_tiled_maximized(
     }
 
     let parked = is_placement_parked(placement.window_id);
-    let offscreen = window_is_at_offscreen_sentinel(placement.window_id);
+    let offscreen = is_window_at_offscreen_sentinel(placement.window_id);
     if let Some(cache) = cache {
         cache.positions.remove(&placement.window_id);
     }
@@ -2441,10 +2475,18 @@ mod tests {
         assert!(recover_placement_parked(wid, SWP_ASYNCWINDOWPOS, |flags| {
             flags == (landing_flags | SWP_ASYNCWINDOWPOS)
         }));
-        assert!(!is_placement_parked(wid));
+        assert!(
+            is_placement_parked(wid),
+            "an animation frame only borrows the position, so ownership must survive it"
+        );
         assert!(
             is_placement_cloaked(wid),
             "successful recovery must retain a ghost-owned effective cloak"
+        );
+        assert!(recover_placement_parked(wid, SET_WINDOW_POS_FLAGS(0), |_| true));
+        assert!(
+            !is_placement_parked(wid),
+            "the synchronous landing pass releases ownership the frames kept"
         );
         unmark_ghost_cloaked(wid);
 

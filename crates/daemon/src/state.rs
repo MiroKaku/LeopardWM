@@ -624,6 +624,10 @@ pub(crate) struct AppState {
     pub(crate) injected_window_info: HashMap<u64, leopardwm_platform_win32::WindowInfo>,
     #[cfg(test)]
     pub(crate) injected_visible_hwnds: HashSet<u64>,
+    /// Test-only override for windows placement left off-screen (parked or at
+    /// the MoveOffScreen sentinel). Real HWNDs can't be parked under test.
+    #[cfg(test)]
+    pub(crate) injected_offscreen_hwnds: HashSet<u64>,
     #[cfg(test)]
     pub(crate) injected_foreground_hwnd: Option<Option<u64>>,
     #[cfg(test)]
@@ -909,6 +913,8 @@ impl AppState {
             injected_window_info: HashMap::new(),
             #[cfg(test)]
             injected_visible_hwnds: HashSet::new(),
+            #[cfg(test)]
+            injected_offscreen_hwnds: HashSet::new(),
             #[cfg(test)]
             injected_foreground_hwnd: None,
             #[cfg(test)]
