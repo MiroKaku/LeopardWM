@@ -2673,135 +2673,131 @@ impl AppState {
                 if self.previous_focused_hwnd == Some(hwnd) {
                     self.show_border(hwnd);
                 }
-            } else if leopardwm_platform_win32::is_window_maximized(hwnd) {
-                // User maximized a tiled window — let it stay maximized. Record
-                // the maximize so a brief restore mid-burst is treated as
-                // settling rather than a snap-back trigger, and remove only
-                // this target's ghost/crossfade visual immediately.
-                self.observe_tiled_window_maximized(hwnd);
-                // The frame is drawn at the layout slot, which no longer
-                // describes a window the app just maximized: refresh it so it
-                // hides instead of outlining half the screen.
+            } else {
+                // Keep the focus frame honest across maximize and restore: the
+                // frame is drawn from the layout slot, so a maximized window
+                // must not show it and a restored one must get it back. Doing it
+                // here, before the position branches, covers every transition
+                // (including a restore handled by the settling deferral, which
+                // never reaches the snap-back filter below).
                 if self.previous_focused_hwnd == Some(hwnd) {
                     self.show_border(hwnd);
                 }
-                debug!("Tiled window {} maximized — allowing", hwnd);
-            } else if defer_snapback_while_settling(
-                self.window_managed_at.get(&hwnd).copied(),
-                self.window_last_maximized_at.get(&hwnd).copied(),
-                std::time::Instant::now(),
-            ) {
-                // Window opened maximized and is still settling (e.g. an app
-                // opening several windows/tabs at once): skip the snap-back so it
-                // can re-assert maximize instead of being tiled narrow.
-                debug!("Deferring snap-back for settling maximized window {}", hwnd);
-            } else {
-                // Remember whether the window was maximized: if it was, this
-                // branch is a restore, and the frame has to come back at the
-                // layout slot even when the spurious-move filter below skips
-                // the snap-back (a restore lands exactly on the layout rect).
-                let was_maximized = self.window_last_maximized_at.remove(&hwnd).is_some();
-                // Position-based false-positive filter: EVENT_OBJECT_LOCATIONCHANGE
-                // fires for many reasons besides actual movement (Z-order,
-                // DWM composition, focus shuffles, DPI nudges, app-internal
-                // size adjustments). Under CPU pressure these spurious
-                // events trigger cascading full retiles. If the window's
-                // current visible bounds are close to the last-placed
-                // layout rect, skip the snap-back.
-                //
-                // Epsilon is generous (20px) because some apps report
-                // their own content rect rather than the requested frame
-                // rect — DPI rounding, custom chrome, internal min-sizes
-                // all create small legitimate deltas we don't want to
-                // chase. Real user drags are typically tens to hundreds
-                // of pixels off, so 20px comfortably separates them.
-                const POSITION_EPSILON_PX: i32 = 20;
-                let expected = self.last_placed_layout_rects.get(&hwnd).copied();
-                let dwm_actual = leopardwm_platform_win32::get_window_visible_rect(hwnd);
-                // Cross-check with GetWindowRect — for Chromium /
-                // Firefox / Cascadia under the swap-chain-stale bug,
-                // EXTENDED_FRAME_BOUNDS reports the visual content
-                // position (where DWM is compositing) rather than the
-                // actual chrome HWND position, which can read tens to
-                // thousands of pixels off after a rapid burst even
-                // though the window has not moved. GetWindowRect is
-                // the OS's authoritative position and stays correct.
-                //
-                // The chrome rect is offset from the layout rect by
-                // the invisible-border insets (apply_placements does
-                // SetWindowPos at `rect.x - inset_l`), so we subtract
-                // the insets before comparing. That makes the chrome
-                // comparison apples-to-apples against the layout rect
-                // and lets us use the same tight POSITION_EPSILON_PX.
-                // Without this, real displacements in the
-                // 21..(20+inset_l*2) px band were misclassified as
-                // swap-chain artifacts and the snap-back was skipped.
-                let chrome_actual = leopardwm_platform_win32::get_window_chrome_rect(hwnd);
-                let chrome_visible = chrome_actual.map(|c| {
-                    let (il, it, _, _) =
-                        leopardwm_platform_win32::get_window_invisible_insets(hwnd);
-                    Rect::new(c.x + il, c.y + it, c.width, c.height)
-                });
-                let within_all = |a: Rect, e: Rect, eps: i32| -> bool {
-                    (a.x - e.x).abs() <= eps
-                        && (a.y - e.y).abs() <= eps
-                        && (a.width - e.width).abs() <= eps
-                        && (a.height - e.height).abs() <= eps
-                };
-                let at_expected_position = match expected {
-                    Some(expected) => {
-                        // Honest comparison — DWM bounds match
-                        // expected layout in both position and size.
-                        let dwm_ok = dwm_actual
-                            .is_some_and(|a| within_all(a, expected, POSITION_EPSILON_PX));
-                        // Swap-chain bug guard — chrome HWND
-                        // (visible-area-corrected) is at the
-                        // expected position even though DWM is
-                        // lying. Position only: the chrome rect's
-                        // size is inflated by invisible borders
-                        // and we don't trivially correct that, so
-                        // a size comparison would mask real edge
-                        // resizes.
-                        let chrome_position_ok = chrome_visible.is_some_and(|a| {
-                            (a.x - expected.x).abs() <= POSITION_EPSILON_PX
-                                && (a.y - expected.y).abs() <= POSITION_EPSILON_PX
-                        });
-                        let dwm_position_displaced = dwm_actual.is_some_and(|a| {
-                            (a.x - expected.x).abs() > POSITION_EPSILON_PX
-                                || (a.y - expected.y).abs() > POSITION_EPSILON_PX
-                        });
-                        let swap_chain_bug = chrome_position_ok && dwm_position_displaced;
-                        let result = dwm_ok || swap_chain_bug;
-                        if !result {
-                            debug!(
+                if leopardwm_platform_win32::is_window_maximized(hwnd) {
+                    // User maximized a tiled window — let it stay maximized. Record
+                    // the maximize so a brief restore mid-burst is treated as
+                    // settling rather than a snap-back trigger, and remove only
+                    // this target's ghost/crossfade visual immediately.
+                    self.observe_tiled_window_maximized(hwnd);
+                    debug!("Tiled window {} maximized — allowing", hwnd);
+                } else if defer_snapback_while_settling(
+                    self.window_managed_at.get(&hwnd).copied(),
+                    self.window_last_maximized_at.get(&hwnd).copied(),
+                    std::time::Instant::now(),
+                ) {
+                    // Window opened maximized and is still settling (e.g. an app
+                    // opening several windows/tabs at once): skip the snap-back so it
+                    // can re-assert maximize instead of being tiled narrow.
+                    debug!("Deferring snap-back for settling maximized window {}", hwnd);
+                } else {
+                    self.window_last_maximized_at.remove(&hwnd);
+                    // Position-based false-positive filter: EVENT_OBJECT_LOCATIONCHANGE
+                    // fires for many reasons besides actual movement (Z-order,
+                    // DWM composition, focus shuffles, DPI nudges, app-internal
+                    // size adjustments). Under CPU pressure these spurious
+                    // events trigger cascading full retiles. If the window's
+                    // current visible bounds are close to the last-placed
+                    // layout rect, skip the snap-back.
+                    //
+                    // Epsilon is generous (20px) because some apps report
+                    // their own content rect rather than the requested frame
+                    // rect — DPI rounding, custom chrome, internal min-sizes
+                    // all create small legitimate deltas we don't want to
+                    // chase. Real user drags are typically tens to hundreds
+                    // of pixels off, so 20px comfortably separates them.
+                    const POSITION_EPSILON_PX: i32 = 20;
+                    let expected = self.last_placed_layout_rects.get(&hwnd).copied();
+                    let dwm_actual = leopardwm_platform_win32::get_window_visible_rect(hwnd);
+                    // Cross-check with GetWindowRect — for Chromium /
+                    // Firefox / Cascadia under the swap-chain-stale bug,
+                    // EXTENDED_FRAME_BOUNDS reports the visual content
+                    // position (where DWM is compositing) rather than the
+                    // actual chrome HWND position, which can read tens to
+                    // thousands of pixels off after a rapid burst even
+                    // though the window has not moved. GetWindowRect is
+                    // the OS's authoritative position and stays correct.
+                    //
+                    // The chrome rect is offset from the layout rect by
+                    // the invisible-border insets (apply_placements does
+                    // SetWindowPos at `rect.x - inset_l`), so we subtract
+                    // the insets before comparing. That makes the chrome
+                    // comparison apples-to-apples against the layout rect
+                    // and lets us use the same tight POSITION_EPSILON_PX.
+                    // Without this, real displacements in the
+                    // 21..(20+inset_l*2) px band were misclassified as
+                    // swap-chain artifacts and the snap-back was skipped.
+                    let chrome_actual = leopardwm_platform_win32::get_window_chrome_rect(hwnd);
+                    let chrome_visible = chrome_actual.map(|c| {
+                        let (il, it, _, _) =
+                            leopardwm_platform_win32::get_window_invisible_insets(hwnd);
+                        Rect::new(c.x + il, c.y + it, c.width, c.height)
+                    });
+                    let within_all = |a: Rect, e: Rect, eps: i32| -> bool {
+                        (a.x - e.x).abs() <= eps
+                            && (a.y - e.y).abs() <= eps
+                            && (a.width - e.width).abs() <= eps
+                            && (a.height - e.height).abs() <= eps
+                    };
+                    let at_expected_position = match expected {
+                        Some(expected) => {
+                            // Honest comparison — DWM bounds match
+                            // expected layout in both position and size.
+                            let dwm_ok = dwm_actual
+                                .is_some_and(|a| within_all(a, expected, POSITION_EPSILON_PX));
+                            // Swap-chain bug guard — chrome HWND
+                            // (visible-area-corrected) is at the
+                            // expected position even though DWM is
+                            // lying. Position only: the chrome rect's
+                            // size is inflated by invisible borders
+                            // and we don't trivially correct that, so
+                            // a size comparison would mask real edge
+                            // resizes.
+                            let chrome_position_ok = chrome_visible.is_some_and(|a| {
+                                (a.x - expected.x).abs() <= POSITION_EPSILON_PX
+                                    && (a.y - expected.y).abs() <= POSITION_EPSILON_PX
+                            });
+                            let dwm_position_displaced = dwm_actual.is_some_and(|a| {
+                                (a.x - expected.x).abs() > POSITION_EPSILON_PX
+                                    || (a.y - expected.y).abs() > POSITION_EPSILON_PX
+                            });
+                            let swap_chain_bug = chrome_position_ok && dwm_position_displaced;
+                            let result = dwm_ok || swap_chain_bug;
+                            if !result {
+                                debug!(
                                 "Window {} off expected position: expected {:?} dwm {:?} chrome_visible {:?}",
                                 hwnd, expected, dwm_actual, chrome_visible
                             );
+                            }
+                            result
                         }
-                        result
-                    }
-                    None => false,
-                };
-                if at_expected_position {
-                    if was_maximized && self.previous_focused_hwnd == Some(hwnd) {
-                        // Restored from maximized: the window is back at its
-                        // layout slot, so the frame belongs here again.
-                        self.show_border(hwnd);
-                    }
-                    debug!(
+                        None => false,
+                    };
+                    if at_expected_position {
+                        debug!(
                         "Ignoring spurious MovedOrResized for {} — already at expected layout position",
                         hwnd
                     );
-                } else {
-                    debug!("Managed window {} moved/resized — snapping back", hwnd);
-                    // Evict the displaced hwnd's last-applied entry so
-                    // apply_layout's fast-path can't short-circuit when
-                    // the layout itself hasn't changed but the window's
-                    // visible rect has drifted away from it. Without
-                    // this the window stays where the user dragged it.
-                    self.last_placed_layout_rects.remove(&hwnd);
-                    if let Err(e) = self.apply_layout() {
-                        warn!("Failed to snap back layout after move/resize: {}", e);
+                    } else {
+                        debug!("Managed window {} moved/resized — snapping back", hwnd);
+                        // Evict the displaced hwnd's last-applied entry so
+                        // apply_layout's fast-path can't short-circuit when
+                        // the layout itself hasn't changed but the window's
+                        // visible rect has drifted away from it. Without
+                        // this the window stays where the user dragged it.
+                        self.last_placed_layout_rects.remove(&hwnd);
+                        if let Err(e) = self.apply_layout() {
+                            warn!("Failed to snap back layout after move/resize: {}", e);
+                        }
                     }
                 }
             }
