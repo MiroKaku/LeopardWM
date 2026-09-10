@@ -693,7 +693,10 @@ fn skip_visible_tiled_maximized(
     // Recover the maximized window at its layout position without resizing it
     // (SWP_NOSIZE preserves the maximized dimensions). A parked window also
     // needs its cloak released; an off-screen one was moved by a plain
-    // `move_window_offscreen` and only needs the position restored.
+    // `move_window_offscreen` and only needs the position restored. Ghost
+    // cloaking must not survive a return to a visible layout slot, or the
+    // window stays invisible with only its border drawn.
+    unmark_ghost_cloaked(placement.window_id);
     if parked {
         let _ = recover_placement_parked(placement.window_id, async_flag, |flags| {
             let Ok(hwnd) = window_id_to_hwnd(placement.window_id) else {
@@ -711,6 +714,7 @@ fn skip_visible_tiled_maximized(
         unsafe {
             let _ = SetWindowPos(hwnd, None, placement.rect.x, placement.rect.y, 0, 0, flags);
         }
+        apply_cloak_state(placement.window_id);
     }
     // Still reported as a maximized skip so the caller keeps its bookkeeping
     // (the layout rect is not claimed as applied).
